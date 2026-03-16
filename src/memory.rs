@@ -16,6 +16,8 @@ impl Memory {
     }
 
     /// Write the bytes from bytes at addr
+    ///
+    /// In memory, the first byte of each instruction should be located at an even addresses. If a program includes sprite data, it should be padded so any instructions following it will be properly situated in RAM.
     pub(crate) fn store(&mut self, bytes: &[u8], addr: Address) -> Result<()> {
         if Memory::is_reserved(addr) {
             return Err(MemoryError::WriteError(WriteError::ReservedAddr(addr)));

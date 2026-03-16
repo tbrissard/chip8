@@ -1,8 +1,8 @@
 use crate::memory::Address;
 
 /// General purpose register
-type VRegister = u8;
-type TimerValue = u8;
+pub(crate) type VRegister = u8;
+pub(crate) type TimerValue = u8;
 
 type Result<T> = std::result::Result<T, RegistersError>;
 
@@ -71,15 +71,11 @@ impl Registers {
     }
 
     pub(crate) fn decrease_delay_timer(&mut self) {
-        if let Some(new_value) = self.delay_timer.checked_sub(1) {
-            self.delay_timer = new_value;
-        }
+        self.delay_timer = self.delay_timer.saturating_sub(1);
     }
 
     pub(crate) fn decrease_sound_timer(&mut self) {
-        if let Some(new_value) = self.sound_timer.checked_sub(1) {
-            self.sound_timer = new_value;
-        }
+        self.sound_timer = self.sound_timer.saturating_sub(1);
     }
 }
 
