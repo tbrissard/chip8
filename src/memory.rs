@@ -1,18 +1,17 @@
-/// Total addressable memory
-const MEMORY_SIZE: usize = 0xFFF;
-type Address = usize;
+pub(crate) type Address = u16;
+const MEMORY_SIZE: Address = 0xFFF;
 
 type Result<T> = std::result::Result<T, MemoryError>;
 
 #[derive(Debug)]
 struct Memory {
-    mem: [u8; MEMORY_SIZE],
+    mem: [u8; MEMORY_SIZE as usize],
 }
 
 impl Memory {
     fn is_reserved(addr: Address) -> bool {
-        const RESERVED_SPACE_START: usize = 0x000;
-        const RESERVED_SPACE_END: usize = 0x1FF;
+        const RESERVED_SPACE_START: Address = 0x000;
+        const RESERVED_SPACE_END: Address = 0x1FF;
         addr >= RESERVED_SPACE_START && addr <= RESERVED_SPACE_END
     }
 
@@ -22,12 +21,12 @@ impl Memory {
             return Err(MemoryError::WriteError(WriteError::ReservedAddr(addr)));
         }
 
-        if addr + bytes.len() - 1 > MEMORY_SIZE {
+        if addr as usize + bytes.len() - 1 > MEMORY_SIZE as usize {
             return Err(MemoryError::WriteError(WriteError::OutOfBound(addr)));
         }
 
         for (b, a) in bytes.iter().zip(addr..) {
-            self.mem[a] = *b;
+            self.mem[a as usize] = *b;
         }
 
         Ok(())
@@ -37,7 +36,7 @@ impl Memory {
 impl std::default::Default for Memory {
     fn default() -> Self {
         Self {
-            mem: [0u8; MEMORY_SIZE],
+            mem: [0u8; MEMORY_SIZE as usize],
         }
     }
 }
