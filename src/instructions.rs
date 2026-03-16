@@ -144,7 +144,7 @@ pub(crate) enum Instructions {
     /// Set sound timer = Vx.
     ///
     /// ST is set equal to the value of Vx.
-    LD_ST(VRegister),
+    SET_ST(VRegister),
 
     /// Set I = I + Vx.
     ///
@@ -223,7 +223,7 @@ impl TryFrom<[u8; 2]> for Instructions {
             (0xF, b, 0x0, 0x7) => Self::LD_DT(b),
             (0xF, b, 0x0, 0xA) => Self::LD_K(b),
             (0xF, b, 0x1, 0x5) => Self::SET_DT(b),
-            (0xF, b, 0x1, 0x8) => Self::LD_ST(b),
+            (0xF, b, 0x1, 0x8) => Self::SET_ST(b),
             (0xF, b, 0x1, 0xE) => Self::ADD_I(b),
             (0xF, b, 0x2, 0x9) => Self::LD_F(b),
             (0xF, b, 0x3, 0x3) => Self::LD_B(b),
@@ -459,8 +459,11 @@ mod tests {
     }
 
     #[test]
-    fn test_parsing_ld_st() {
-        assert_eq!(Instructions::try_from(0xF118), Ok(Instructions::LD_ST(0x1)))
+    fn test_parsing_set_st() {
+        assert_eq!(
+            Instructions::try_from(0xF118),
+            Ok(Instructions::SET_ST(0x1))
+        )
     }
 
     #[test]
