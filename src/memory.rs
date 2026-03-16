@@ -1,5 +1,5 @@
 /// Total addressable memory
-const MEMORY_SIZE: usize = 4096;
+const MEMORY_SIZE: usize = 0xFFF;
 type Address = usize;
 
 type Result<T> = std::result::Result<T, MemoryError>;
@@ -10,8 +10,27 @@ struct Memory {
 }
 
 impl Memory {
-    pub(crate) fn store(&mut self, data: &[u8], start: Address) -> Result<()> {
-        todo!()
+    fn is_reserved(addr: Address) -> bool {
+        const RESERVED_SPACE_START: usize = 0x000;
+        const RESERVED_SPACE_END: usize = 0x1FF;
+        addr >= RESERVED_SPACE_START && addr <= RESERVED_SPACE_END
+    }
+
+    /// Write the bytes from bytes at addr
+    pub(crate) fn store(&mut self, bytes: &[u8], addr: Address) -> Result<()> {
+        if Memory::is_reserved(addr) {
+            return Err(MemoryError::WriteError(WriteError::ReservedAddr(addr)));
+        }
+
+        if addr + bytes.len() - 1 > MEMORY_SIZE {
+            return Err(MemoryError::WriteError(WriteError::OutOfBound(addr)));
+        }
+
+        for (b, a) in bytes.iter().zip(addr..) {
+            self.mem[a] = *b;
+        }
+
+        Ok(())
     }
 }
 
@@ -32,7 +51,7 @@ pub enum MemoryError {
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum WriteError {
     #[error("address is out of bound ({0})")]
-    OutOfBoundAddr(Address),
+    OutOfBound(Address),
     #[error("address is reserved ({0})")]
     ReservedAddr(Address),
 }
@@ -55,7 +74,7 @@ mod tests {
         let res = mem.store(&[1u8], MEMORY_SIZE + 1);
         assert_eq!(
             res,
-            Err(MemoryError::WriteError(WriteError::OutOfBoundAddr(
+            Err(MemoryError::WriteError(WriteError::OutOfBound(
                 MEMORY_SIZE + 1
             )))
         );
