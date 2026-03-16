@@ -2,6 +2,7 @@ use crate::memory::Address;
 
 /// General purpose register
 type VRegister = u8;
+type TimerValue = u8;
 
 type Result<T> = std::result::Result<T, RegistersError>;
 
@@ -17,8 +18,8 @@ pub(crate) struct Registers {
     i_register: Address,
 
     /// Chip-8 also has two special purpose 8-bit registers, for the delay and sound timers. When these registers are non-zero, they are automatically decremented at a rate of 60Hz.
-    delay_timer_register: u8,
-    sound_timer_register: u8,
+    delay_timer: TimerValue,
+    sound_timer: TimerValue,
 
     // Not accessible by programs
     /// used to store the currently executing address
@@ -48,9 +49,37 @@ impl Registers {
             return Err(RegistersError::StackEmpty);
         }
 
-        let addr = self.stack[self.stack_pointer as usize - 1];
         self.stack_pointer -= 1;
+        let addr = self.stack[self.stack_pointer as usize];
         Ok(addr)
+    }
+
+    pub(crate) fn set_delay_timer(&mut self, value: TimerValue) {
+        self.delay_timer = value;
+    }
+
+    pub(crate) fn set_sound_timer(&mut self, value: TimerValue) {
+        self.sound_timer = value;
+    }
+
+    pub(crate) fn delay_timer(&self) -> TimerValue {
+        self.delay_timer
+    }
+
+    pub(crate) fn sound_timer(&self) -> TimerValue {
+        self.sound_timer
+    }
+
+    pub(crate) fn decrease_delay_timer(&mut self) {
+        if let Some(new_value) = self.delay_timer.checked_sub(1) {
+            self.delay_timer = new_value;
+        }
+    }
+
+    pub(crate) fn decrease_sound_timer(&mut self) {
+        if let Some(new_value) = self.sound_timer.checked_sub(1) {
+            self.sound_timer = new_value;
+        }
     }
 }
 
@@ -87,5 +116,19 @@ mod tests {
             assert_eq!(regs.push_stack(0x200), Ok(()));
         }
         assert_eq!(regs.push_stack(0x200), Err(RegistersError::StackFull));
+    }
+
+    #[test]
+    fn test_timers_underflow() {
+        let mut regs = create_registers();
+
+        assert_eq!(regs.delay_timer(), 0);
+        assert_eq!(regs.sound_timer(), 0);
+
+        regs.decrease_delay_timer();
+        regs.decrease_sound_timer();
+
+        assert_eq!(regs.delay_timer(), 0);
+        assert_eq!(regs.sound_timer(), 0);
     }
 }
