@@ -4,8 +4,16 @@ const MEMORY_SIZE: Address = 0xFFF;
 type Result<T> = std::result::Result<T, MemoryError>;
 
 #[derive(Debug)]
-struct Memory {
-    mem: [u8; MEMORY_SIZE as usize],
+pub(crate) struct Memory {
+    data: [u8; MEMORY_SIZE as usize],
+}
+
+impl Default for Memory {
+    fn default() -> Self {
+        Self {
+            data: [0u8; MEMORY_SIZE as usize],
+        }
+    }
 }
 
 impl Memory {
@@ -28,18 +36,22 @@ impl Memory {
         }
 
         for (b, a) in bytes.iter().zip(addr..) {
-            self.mem[a as usize] = *b;
+            self.data[a as usize] = *b;
         }
 
         Ok(())
     }
-}
 
-impl std::default::Default for Memory {
-    fn default() -> Self {
-        Self {
-            mem: [0u8; MEMORY_SIZE as usize],
+    pub(crate) fn read(&mut self, addr: Address, n: Address) -> Result<&[u8]> {
+        if Memory::is_reserved(addr) {
+            return Err(MemoryError::WriteError(WriteError::ReservedAddr(addr)));
         }
+
+        if addr + n - 1 > MEMORY_SIZE {
+            return Err(MemoryError::WriteError(WriteError::OutOfBound(addr)));
+        }
+
+        Ok(&self.data[addr as usize..(addr + n) as usize])
     }
 }
 
@@ -59,18 +71,31 @@ pub enum WriteError {
 
 #[cfg(test)]
 mod tests {
-    use crate::memory::MEMORY_SIZE;
-    use crate::memory::MemoryError;
-
+    use super::Address;
+    use super::MEMORY_SIZE;
     use super::Memory;
+    use super::MemoryError;
     use super::WriteError;
+
+    const TEST_DATA: [u8; 3] = [1, 2, 3];
+    const TEST_ADDR: Address = 0x200;
 
     fn create_memory() -> Memory {
         Memory::default()
     }
 
     #[test]
-    fn test_write_address_out_of_bounds() {
+    fn store_at_start() {
+        let mut mem = create_memory();
+        mem.store(&TEST_DATA, TEST_ADDR).unwrap();
+        assert_eq!(
+            &mem.data[TEST_ADDR as usize..TEST_ADDR as usize + TEST_DATA.len()],
+            &TEST_DATA
+        );
+    }
+
+    #[test]
+    fn store_out_of_bounds() {
         let mut mem = create_memory();
         let res = mem.store(&[1u8], MEMORY_SIZE + 1);
         assert_eq!(
@@ -82,7 +107,7 @@ mod tests {
     }
 
     #[test]
-    fn test_write_address_reserved() {
+    fn store_reserved() {
         let mut mem = create_memory();
 
         let res = mem.store(&[1u8], 0x000);
@@ -95,6 +120,20 @@ mod tests {
         assert_eq!(
             res,
             Err(MemoryError::WriteError(WriteError::ReservedAddr(0x1FF)))
+        );
+    }
+
+    #[test]
+    fn read_at_start() {
+        let mut mem = create_memory();
+
+        mem.data[TEST_ADDR as usize] = TEST_DATA[0];
+        mem.data[TEST_ADDR as usize + 1] = TEST_DATA[1];
+        mem.data[TEST_ADDR as usize + 2] = TEST_DATA[2];
+
+        assert_eq!(
+            mem.read(TEST_ADDR, TEST_DATA.len() as Address).unwrap(),
+            TEST_DATA
         );
     }
 }
