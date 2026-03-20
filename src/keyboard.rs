@@ -71,9 +71,11 @@ impl From<Key> for VRegister {
     }
 }
 
-impl From<VRegister> for Key {
-    fn from(value: VRegister) -> Self {
-        match value {
+impl TryFrom<VRegister> for Key {
+    type Error = KeyboardError;
+
+    fn try_from(value: VRegister) -> Result<Self, KeyboardError> {
+        Ok(match value {
             0x0 => Key::ZERO,
             0x1 => Key::ONE,
             0x2 => Key::TWO,
@@ -90,8 +92,8 @@ impl From<VRegister> for Key {
             0xD => Key::D,
             0xE => Key::E,
             0xF => Key::F,
-            _ => panic!("Invalid VRegister value"),
-        }
+            _ => return Err(KeyboardError::InvalidKeyValue(value)),
+        })
     }
 }
 
@@ -135,4 +137,7 @@ impl Keyboard {
 pub(crate) enum KeyboardError {
     #[error("{0} is not bound to the virtual keyboard")]
     KeyUnbound(KeyCode),
+
+    #[error("{0} is not a valid key value")]
+    InvalidKeyValue(VRegister),
 }

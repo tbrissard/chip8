@@ -5,6 +5,25 @@ use std::{
 
 use num_traits::{Num, WrappingShl, WrappingShr};
 
+pub(crate) const DIGITS: [[u8; 5]; 16] = [
+    [0xF0, 0x90, 0x90, 0x90, 0xF0],
+    [0x20, 0x60, 0x20, 0x20, 0x70],
+    [0xF0, 0x10, 0xF0, 0x80, 0xF0],
+    [0xF0, 0x10, 0xF0, 0x10, 0xF0],
+    [0x90, 0x90, 0xF0, 0x10, 0x10],
+    [0xF0, 0x80, 0xF0, 0x10, 0xF0],
+    [0xF0, 0x80, 0xF0, 0x90, 0xF0],
+    [0xF0, 0x10, 0x20, 0x40, 0x40],
+    [0xF0, 0x90, 0xF0, 0x90, 0xF0],
+    [0xF0, 0x90, 0xF0, 0x10, 0xF0],
+    [0xF0, 0x90, 0xF0, 0x90, 0x90],
+    [0xE0, 0x90, 0xE0, 0x90, 0xE0],
+    [0xF0, 0x80, 0x80, 0x80, 0xF0],
+    [0xE0, 0x90, 0x90, 0x90, 0xE0],
+    [0xF0, 0x80, 0xF0, 0x80, 0xF0],
+    [0xF0, 0x80, 0xF0, 0x80, 0x80],
+];
+
 #[derive(Debug, Default)]
 pub(crate) struct Sprite {
     bytes: Vec<u8>,
@@ -23,40 +42,27 @@ impl From<&[u8]> for Sprite {
     }
 }
 
-const DIGIT_0: [u8; 5] = [0xF0, 0x90, 0x90, 0x90, 0xF0];
-const DIGIT_1: [u8; 5] = [0x20, 0x60, 0x20, 0x20, 0x70];
-const DIGIT_2: [u8; 5] = [0xF0, 0x10, 0xF0, 0x80, 0xF0];
-const DIGIT_3: [u8; 5] = [0xF0, 0x10, 0xF0, 0x10, 0xF0];
-const DIGIT_4: [u8; 5] = [0x90, 0x90, 0xF0, 0x10, 0x10];
-const DIGIT_5: [u8; 5] = [0xF0, 0x80, 0xF0, 0x10, 0xF0];
-const DIGIT_6: [u8; 5] = [0xF0, 0x80, 0xF0, 0x90, 0xF0];
-const DIGIT_7: [u8; 5] = [0xF0, 0x10, 0x20, 0x40, 0x40];
-const DIGIT_8: [u8; 5] = [0xF0, 0x90, 0xF0, 0x90, 0xF0];
-const DIGIT_9: [u8; 5] = [0xF0, 0x90, 0xF0, 0x10, 0xF0];
-const DIGIT_A: [u8; 5] = [0xF0, 0x90, 0xF0, 0x90, 0x90];
-const DIGIT_B: [u8; 5] = [0xE0, 0x90, 0xE0, 0x90, 0xE0];
-const DIGIT_C: [u8; 5] = [0xF0, 0x80, 0x80, 0x80, 0xF0];
-const DIGIT_D: [u8; 5] = [0xE0, 0x90, 0x90, 0x90, 0xE0];
-const DIGIT_E: [u8; 5] = [0xF0, 0x80, 0xF0, 0x80, 0xF0];
-const DIGIT_F: [u8; 5] = [0xF0, 0x80, 0xF0, 0x80, 0x80];
-
 pub(crate) type StandardScreen = Screen<u64, 32>;
 
 #[derive(Debug)]
-struct Screen<T, const N: usize> {
+pub(crate) struct Screen<T, const N: usize> {
     pixels: [T; N],
+}
+
+impl<T, const N: usize> Default for Screen<T, N>
+where
+    T: Num + Copy,
+{
+    fn default() -> Self {
+        Self {
+            pixels: [T::zero(); N],
+        }
+    }
 }
 
 impl<T, const N: usize> Screen<T, N>
 where
-    T: Num
-        + Copy
-        + WrappingShl
-        + WrappingShr
-        + BitAnd<Output = T>
-        + From<u8>
-        + BitXorAssign
-        + ShrAssign<i32>,
+    T: Num + Copy + WrappingShl + WrappingShr + BitAnd<Output = T> + From<u8> + BitXorAssign,
 {
     const PIXEL_ON: char = '*';
     const PIXEL_OFF: char = '_';
@@ -111,7 +117,7 @@ where
                 Self::PIXEL_OFF
             };
             pixels.push(pixel);
-            mask >>= 1;
+            mask = mask >> 1;
         }
 
         pixels
@@ -151,7 +157,7 @@ where
 #[cfg(test)]
 mod tests {
 
-    use super::{DIGIT_0, Sprite, StandardScreen};
+    use super::{DIGITS, Sprite, StandardScreen};
 
     fn create_screen() -> StandardScreen {
         StandardScreen::new()
@@ -178,8 +184,8 @@ mod tests {
         assert_eq!(sprite.bytes, vec![1; Sprite::MAX_LEN]);
     }
 
-    fn create_sprite() -> Sprite {
-        Sprite::from(DIGIT_0.as_slice())
+    fn create_sprite_digit_zero() -> Sprite {
+        Sprite::from(DIGITS[0].as_slice())
     }
 
     #[test]
@@ -203,7 +209,7 @@ mod tests {
     #[test]
     fn write_sprite_within_bounds() {
         let mut screen = StandardScreen::new();
-        let sprite = create_sprite();
+        let sprite = create_sprite_digit_zero();
 
         let turned_off = screen.write_sprite(&sprite, 0, 0);
         assert!(!turned_off);
@@ -222,7 +228,7 @@ mod tests {
     #[test]
     fn write_sprite_cut_horizontally() {
         let mut screen = StandardScreen::new();
-        let sprite = create_sprite();
+        let sprite = create_sprite_digit_zero();
 
         let turned_off = screen.write_sprite(&sprite, 62, 0);
         assert!(!turned_off);
@@ -241,7 +247,7 @@ mod tests {
     #[test]
     fn write_sprite_cut_vertically() {
         let mut screen = StandardScreen::new();
-        let sprite = create_sprite();
+        let sprite = create_sprite_digit_zero();
 
         let turned_off = screen.write_sprite(&sprite, 0, 30);
         assert!(!turned_off);
@@ -260,7 +266,7 @@ mod tests {
     #[test]
     fn write_sprite_coords_out_bound() {
         let mut screen = StandardScreen::new();
-        let sprite = create_sprite();
+        let sprite = create_sprite_digit_zero();
 
         let turned_off = screen.write_sprite(&sprite, 68, 36);
         assert!(!turned_off);
@@ -280,8 +286,8 @@ mod tests {
     #[test]
     fn write_sprite_collision() {
         let mut screen = StandardScreen::new();
-        let sprite_1 = create_sprite();
-        let sprite_2 = create_sprite();
+        let sprite_1 = create_sprite_digit_zero();
+        let sprite_2 = create_sprite_digit_zero();
 
         let turned_off = screen.write_sprite(&sprite_1, 0, 0);
         assert!(!turned_off);

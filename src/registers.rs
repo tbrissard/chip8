@@ -9,27 +9,27 @@ type Result<T> = std::result::Result<T, RegistersError>;
 const MAX_SUBROUTINES: u8 = 16;
 
 #[derive(Debug, Default)]
-pub(crate) struct Registers {
+pub(super) struct Registers {
     /// Chip-8 has 16 general purpose 8-bit registers, usually referred to as Vx, where x is a hexadecimal digit (0 through F).
     /// The VF register should not be used by any program, as it is used as a flag by some instructions.
-    v_registers: [VRegister; 16],
+    pub(super) v_registers: [VRegister; 16],
 
     /// This register is generally used to store memory addresses, so only the lowest (rightmost) 12 bits are usually used.
-    i_register: Address,
+    pub(super) i: Address,
 
     /// Chip-8 also has two special purpose 8-bit registers, for the delay and sound timers. When these registers are non-zero, they are automatically decremented at a rate of 60Hz.
-    delay_timer: TimerValue,
-    sound_timer: TimerValue,
+    pub(super) delay_timer: TimerValue,
+    pub(super) sound_timer: TimerValue,
 
     // Not accessible by programs
     /// used to store the currently executing address
-    program_counter: Address,
+    pub(super) program_counter: Address,
 
     /// The stack pointer (SP) can be 8-bit, it is used to point to the topmost level of the stack.
-    stack_pointer: u8,
+    pub(super) stack_pointer: u8,
 
     /// The stack is an array of 16 16-bit values, used to store the address that the interpreter shoud return to when finished with a subroutine. Chip-8 allows for up to 16 levels of nested subroutines.
-    stack: [Address; MAX_SUBROUTINES as usize],
+    pub(super) stack: [Address; MAX_SUBROUTINES as usize],
 }
 
 impl Registers {
@@ -54,20 +54,8 @@ impl Registers {
         Ok(addr)
     }
 
-    pub(crate) fn set_delay_timer(&mut self, value: TimerValue) {
-        self.delay_timer = value;
-    }
-
-    pub(crate) fn set_sound_timer(&mut self, value: TimerValue) {
-        self.sound_timer = value;
-    }
-
-    pub(crate) fn delay_timer(&self) -> TimerValue {
-        self.delay_timer
-    }
-
-    pub(crate) fn sound_timer(&self) -> TimerValue {
-        self.sound_timer
+    pub(crate) fn top_stack(&self) -> Option<Address> {
+        (self.stack_pointer > 0).then_some(self.stack[self.stack_pointer as usize - 1])
     }
 
     pub(crate) fn decrease_delay_timer(&mut self) {
@@ -96,16 +84,17 @@ mod tests {
     }
 
     #[test]
-    fn test_stack() {
+    fn stack() {
         let mut regs = create_registers();
 
         assert_eq!(regs.pop_stack(), Err(RegistersError::StackEmpty));
         assert_eq!(regs.push_stack(0x200), Ok(()));
+        assert_eq!(regs.top_stack(), Some(0x200));
         assert_eq!(regs.pop_stack(), Ok(0x200));
     }
 
     #[test]
-    fn test_stack_overflow() {
+    fn stack_overflow() {
         let mut regs = create_registers();
 
         for _ in 0..16 {
@@ -115,16 +104,16 @@ mod tests {
     }
 
     #[test]
-    fn test_timers_underflow() {
+    fn timers_underflow() {
         let mut regs = create_registers();
 
-        assert_eq!(regs.delay_timer(), 0);
-        assert_eq!(regs.sound_timer(), 0);
+        assert_eq!(regs.delay_timer, 0);
+        assert_eq!(regs.sound_timer, 0);
 
         regs.decrease_delay_timer();
         regs.decrease_sound_timer();
 
-        assert_eq!(regs.delay_timer(), 0);
-        assert_eq!(regs.sound_timer(), 0);
+        assert_eq!(regs.delay_timer, 0);
+        assert_eq!(regs.sound_timer, 0);
     }
 }
