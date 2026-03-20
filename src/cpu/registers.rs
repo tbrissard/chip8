@@ -1,8 +1,8 @@
 use crate::memory::Address;
 
 /// General purpose register
-pub(crate) type VRegister = u8;
-pub(crate) type TimerValue = u8;
+pub(super) type VRegister = u8;
+pub(super) type TimerValue = u8;
 
 type Result<T> = std::result::Result<T, RegistersError>;
 
@@ -33,7 +33,7 @@ pub(super) struct Registers {
 }
 
 impl Registers {
-    pub(crate) fn push_stack(&mut self, addr: Address) -> Result<()> {
+    pub(super) fn push_stack(&mut self, addr: Address) -> Result<()> {
         if self.stack_pointer == MAX_SUBROUTINES {
             return Err(RegistersError::StackFull);
         }
@@ -44,7 +44,7 @@ impl Registers {
         Ok(())
     }
 
-    pub(crate) fn pop_stack(&mut self) -> Result<Address> {
+    pub(super) fn pop_stack(&mut self) -> Result<Address> {
         if self.stack_pointer == 0 {
             return Err(RegistersError::StackEmpty);
         }
@@ -54,15 +54,15 @@ impl Registers {
         Ok(addr)
     }
 
-    pub(crate) fn top_stack(&self) -> Option<Address> {
+    pub(super) fn top_stack(&self) -> Option<Address> {
         (self.stack_pointer > 0).then_some(self.stack[self.stack_pointer as usize - 1])
     }
 
-    pub(crate) fn decrease_delay_timer(&mut self) {
+    pub(super) fn decrease_delay_timer(&mut self) {
         self.delay_timer = self.delay_timer.saturating_sub(1);
     }
 
-    pub(crate) fn decrease_sound_timer(&mut self) {
+    pub(super) fn decrease_sound_timer(&mut self) {
         self.sound_timer = self.sound_timer.saturating_sub(1);
     }
 }

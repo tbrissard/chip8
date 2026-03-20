@@ -1,12 +1,17 @@
-use rand::{RngExt, random, rngs::ThreadRng};
+use rand::{RngExt, rngs::ThreadRng};
 
 use crate::{
+    cpu::{
+        instruction::Instructions,
+        registers::{Registers, RegistersError, VRegister},
+    },
     display::StandardScreen,
-    instructions::{Instructions, InstructionsError},
     keyboard::{Keyboard, KeyboardError},
     memory::{self, Address, Memory, MemoryError},
-    registers::{Registers, RegistersError, VRegister},
 };
+
+mod instruction;
+mod registers;
 
 #[derive(Debug, Default)]
 pub struct Cpu {
@@ -43,7 +48,7 @@ impl Cpu {
         self.set_v_reg(0xF, value);
     }
 
-    pub(crate) fn execute(&mut self, instr: Instructions) -> Result<(), ExecutionError> {
+    fn execute(&mut self, instr: Instructions) -> Result<(), ExecutionError> {
         match instr {
             Instructions::CLS => self.screen.clear(),
 
@@ -210,20 +215,18 @@ impl Cpu {
 #[derive(Debug, thiserror::Error)]
 pub enum ExecutionError {
     #[error("register error: {0}")]
-    RegistersError(#[from] RegistersError),
+    Registers(#[from] RegistersError),
 
     #[error("memory error: {0}")]
-    MemoryError(#[from] MemoryError),
+    Memory(#[from] MemoryError),
 
     #[error("keyboard error: {0}")]
-    KeyboardError(#[from] KeyboardError),
+    Keyboard(#[from] KeyboardError),
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{instructions::Instructions, memory::Address};
-
-    use super::Cpu;
+    use super::*;
 
     const ADDR: Address = 0x321;
 

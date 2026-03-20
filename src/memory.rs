@@ -1,4 +1,4 @@
-use crate::{display::DIGITS, registers::VRegister};
+use crate::display::DIGITS;
 
 pub(crate) type Address = u16;
 const MEMORY_SIZE: Address = 0xFFF;
@@ -12,7 +12,7 @@ pub(crate) struct Memory {
 
 const DIGITS_ADDR: Address = 0x0;
 
-pub(crate) fn digit_addr(value: VRegister) -> Address {
+pub(crate) fn digit_addr(value: u8) -> Address {
     DIGITS_ADDR + 5 * value as Address
 }
 
@@ -20,7 +20,7 @@ impl Default for Memory {
     fn default() -> Self {
         let mut data = [0u8; MEMORY_SIZE as usize];
 
-        data[DIGITS_ADDR as usize..DIGITS.as_flattened().len() as usize]
+        data[DIGITS_ADDR as usize..DIGITS.as_flattened().len()]
             .copy_from_slice(DIGITS.as_flattened());
 
         Self { data }
@@ -28,13 +28,11 @@ impl Default for Memory {
 }
 
 impl Memory {
+    #[allow(clippy::absurd_extreme_comparisons)]
     fn is_reserved(addr: Address) -> bool {
         const RESERVED_SPACE_START: Address = 0x000;
         const RESERVED_SPACE_END: Address = 0x1FF;
-
-        // let r = RESERVED_SPACE_START..RESERVED_SPACE_END;
-        // r.contains(&addr)
-        addr >= RESERVED_SPACE_START && addr <= RESERVED_SPACE_END
+        (RESERVED_SPACE_START..=RESERVED_SPACE_END).contains(&addr)
     }
 
     /// Write the bytes from bytes at addr

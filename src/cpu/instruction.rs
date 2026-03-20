@@ -1,10 +1,10 @@
-use crate::{memory::Address, registers::VRegister};
+use crate::{cpu::registers::VRegister, memory::Address};
 
 type Value = u8;
 
 #[derive(Debug, PartialEq, Eq)]
-#[allow(non_camel_case_types)]
-pub(crate) enum Instructions {
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+pub(super) enum Instructions {
     /// Clear the display.
     CLS,
 
