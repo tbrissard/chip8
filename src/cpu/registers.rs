@@ -57,14 +57,6 @@ impl Registers {
     pub(super) fn top_stack(&self) -> Option<Address> {
         (self.stack_pointer > 0).then_some(self.stack[self.stack_pointer as usize - 1])
     }
-
-    pub(super) fn decrease_delay_timer(&mut self) {
-        self.delay_timer = self.delay_timer.saturating_sub(1);
-    }
-
-    pub(super) fn decrease_sound_timer(&mut self) {
-        self.sound_timer = self.sound_timer.saturating_sub(1);
-    }
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -101,19 +93,5 @@ mod tests {
             assert_eq!(regs.push_stack(0x200), Ok(()));
         }
         assert_eq!(regs.push_stack(0x200), Err(RegistersError::StackFull));
-    }
-
-    #[test]
-    fn timers_underflow() {
-        let mut regs = create_registers();
-
-        assert_eq!(regs.delay_timer, 0);
-        assert_eq!(regs.sound_timer, 0);
-
-        regs.decrease_delay_timer();
-        regs.decrease_sound_timer();
-
-        assert_eq!(regs.delay_timer, 0);
-        assert_eq!(regs.sound_timer, 0);
     }
 }

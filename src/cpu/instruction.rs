@@ -190,11 +190,11 @@ fn from_low_12(a: u8, b: u8, c: u8) -> u16 {
     ((a as u16) << 8) | ((b as u16) << 4) | (c as u16)
 }
 
-impl TryFrom<[u8; 2]> for Instructions {
+impl TryFrom<&[u8; 2]> for Instructions {
     type Error = InstructionsError;
 
-    fn try_from(value: [u8; 2]) -> Result<Self, Self::Error> {
-        Ok(match split_nibbles(value) {
+    fn try_from(value: &[u8; 2]) -> Result<Self, Self::Error> {
+        Ok(match split_nibbles(*value) {
             (0x0, 0x0, 0xE, 0x0) => Self::CLS,
             (0x0, 0x0, 0xE, 0xE) => Self::RET,
             (0x1, b, c, d) => Self::JP(from_low_12(b, c, d)),
@@ -229,7 +229,7 @@ impl TryFrom<[u8; 2]> for Instructions {
             (0xF, b, 0x3, 0x3) => Self::LD_B(b),
             (0xF, b, 0x5, 0x5) => Self::LD_MEM_I(b),
             (0xF, b, 0x6, 0x5) => Self::LD_I_MEM(b),
-            _ => return Err(InstructionsError::InvalidInstruction(value)),
+            _ => return Err(InstructionsError::InvalidInstruction(*value)),
         })
     }
 }
@@ -238,7 +238,7 @@ impl TryFrom<u16> for Instructions {
     type Error = InstructionsError;
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
-        Self::try_from(u16::to_be_bytes(value))
+        Self::try_from(&u16::to_be_bytes(value))
     }
 }
 

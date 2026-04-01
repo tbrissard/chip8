@@ -132,7 +132,7 @@ impl Keyboard {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum KeyboardError {
+pub enum KeyboardError {
     #[error("{0} is not bound to the virtual keyboard")]
     KeyUnbound(KeyCode),
 

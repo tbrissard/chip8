@@ -65,7 +65,7 @@ where
     T: Num + Copy + WrappingShl + WrappingShr + BitAnd<Output = T> + From<u8> + BitXorAssign,
 {
     const PIXEL_ON: char = '*';
-    const PIXEL_OFF: char = '_';
+    const PIXEL_OFF: char = ' ';
 
     const WIDTH: usize = size_of::<T>() * 8;
     const HEIGHT: usize = N;

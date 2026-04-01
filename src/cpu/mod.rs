@@ -1,35 +1,110 @@
+use std::time::{Duration, Instant};
+
 use rand::{RngExt, rngs::ThreadRng};
+use ratatui::{
+    DefaultTerminal, Frame,
+    buffer::Buffer,
+    layout::Rect,
+    style::Stylize,
+    symbols::border,
+    text::{Line, ToText},
+    widgets::{Block, Paragraph, Widget},
+};
 
 use crate::{
     cpu::{
-        instruction::Instructions,
+        instruction::{Instructions, InstructionsError},
         registers::{Registers, RegistersError, VRegister},
     },
-    display::StandardScreen,
     keyboard::{Keyboard, KeyboardError},
     memory::{self, Address, Memory, MemoryError},
+    screen::StandardScreen,
 };
 
 mod instruction;
 mod registers;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Cpu {
     registers: Registers,
     keyboard: Keyboard,
     memory: Memory,
-    screen: StandardScreen,
+    pub(crate) screen: StandardScreen,
 
     rng: ThreadRng,
+    exit: bool,
+}
+
+const START_ADDRESS: Address = 0x200;
+
+impl Default for Cpu {
+    fn default() -> Self {
+        let registers = Registers {
+            program_counter: START_ADDRESS,
+            ..Default::default()
+        };
+
+        Self {
+            registers,
+            keyboard: Keyboard::default(),
+            memory: Memory::default(),
+            screen: StandardScreen::default(),
+
+            rng: ThreadRng::default(),
+            exit: false,
+        }
+    }
 }
 
 impl Cpu {
-    fn new() -> Self {
-        Self::default()
+    pub(crate) fn load_program(bytes: &[u8]) -> Result<Cpu, ExecutionError> {
+        let mut cpu = Self::default();
+        cpu.memory.store(bytes, START_ADDRESS)?;
+        Ok(cpu)
+    }
+
+    pub(crate) fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<(), ExecutionError> {
+        const REFRESH_RATE: u64 = 60;
+        let interval = Duration::from_millis(1000 / REFRESH_RATE);
+        let mut next_refresh = Instant::now() + interval;
+
+        let start = Instant::now();
+        while !self.exit {
+            let instr = self.next_instr()?;
+            self.execute(instr)?;
+
+            terminal
+                .draw(|frame| self.draw(frame))
+                .map_err(ExecutionError::Drawing)?;
+
+            self.decrease_delay_timer();
+            self.decrease_sound_timer();
+
+            std::thread::sleep(next_refresh - Instant::now());
+            next_refresh += interval;
+
+            if start.elapsed() > Duration::from_secs(30) {
+                self.exit = true;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn draw(&self, frame: &mut Frame) {
+        frame.render_widget(self, frame.area());
     }
 
     fn skip_instr(&mut self) {
         self.registers.program_counter += 2;
+    }
+
+    fn next_instr(&mut self) -> Result<Instructions, ExecutionError> {
+        let a = self.memory.read(self.registers.program_counter, 2)?;
+        let a = <&[u8; 2]>::try_from(a).unwrap();
+        let instr: Instructions = a.try_into()?;
+        self.registers.program_counter += 2;
+        Ok(instr)
     }
 
     fn v_reg(&self, reg_index: VRegister) -> u8 {
@@ -46,6 +121,14 @@ impl Cpu {
 
     fn set_f(&mut self, value: VRegister) {
         self.set_v_reg(0xF, value);
+    }
+
+    fn decrease_delay_timer(&mut self) {
+        self.registers.delay_timer = self.registers.delay_timer.saturating_sub(1);
+    }
+
+    fn decrease_sound_timer(&mut self) {
+        self.registers.sound_timer = self.registers.sound_timer.saturating_sub(1);
     }
 
     fn execute(&mut self, instr: Instructions) -> Result<(), ExecutionError> {
@@ -212,6 +295,26 @@ impl Cpu {
     }
 }
 
+impl Widget for &Cpu {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        let title = Line::from("Chip8 interpreter".bold());
+
+        let block = Block::bordered()
+            .title(title.centered())
+            .border_set(border::THICK);
+
+        let screen = self.screen.to_text();
+
+        Paragraph::new(screen)
+            .centered()
+            .block(block)
+            .render(area, buf);
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ExecutionError {
     #[error("register error: {0}")]
@@ -222,6 +325,12 @@ pub enum ExecutionError {
 
     #[error("keyboard error: {0}")]
     Keyboard(#[from] KeyboardError),
+
+    #[error("instruction error: {0}")]
+    Instruction(#[from] InstructionsError),
+
+    #[error("drawing error: {0}")]
+    Drawing(std::io::Error),
 }
 
 #[cfg(test)]
@@ -230,13 +339,13 @@ mod tests {
 
     const ADDR: Address = 0x321;
 
-    fn create_interpreter() -> Cpu {
+    fn create_cpu() -> Cpu {
         Cpu::default()
     }
 
     #[test]
     fn instruction_jp() {
-        let mut int = create_interpreter();
+        let mut int = create_cpu();
 
         let res = int.execute(Instructions::JP(ADDR));
         assert!(res.is_ok());
@@ -245,7 +354,7 @@ mod tests {
 
     #[test]
     fn instruction_call() {
-        let mut int = create_interpreter();
+        let mut int = create_cpu();
 
         let pc = int.registers.program_counter;
 
@@ -256,7 +365,7 @@ mod tests {
 
     #[test]
     fn instruction_se_value() {
-        let mut int = create_interpreter();
+        let mut int = create_cpu();
 
         int.registers.v_registers[0] = 1;
         let pc = int.registers.program_counter;
@@ -270,7 +379,7 @@ mod tests {
 
     #[test]
     fn instruction_sne() {
-        let mut int = create_interpreter();
+        let mut int = create_cpu();
 
         int.registers.v_registers[0] = 0;
         let pc = int.registers.program_counter;
@@ -284,7 +393,7 @@ mod tests {
 
     #[test]
     fn instruction_se_reg() {
-        let mut int = create_interpreter();
+        let mut int = create_cpu();
 
         let pc = int.registers.program_counter;
         int.registers.v_registers[0] = 1;
@@ -296,5 +405,19 @@ mod tests {
         int.registers.v_registers[1] = 0;
         int.execute(Instructions::SE_Reg(0, 1)).unwrap();
         assert_ne!(int.registers.program_counter, pc + 2);
+    }
+
+    #[test]
+    fn timers_underflow() {
+        let mut cpu = create_cpu();
+
+        assert_eq!(cpu.registers.delay_timer, 0);
+        assert_eq!(cpu.registers.sound_timer, 0);
+
+        cpu.decrease_delay_timer();
+        cpu.decrease_sound_timer();
+
+        assert_eq!(cpu.registers.delay_timer, 0);
+        assert_eq!(cpu.registers.sound_timer, 0);
     }
 }

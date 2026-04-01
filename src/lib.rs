@@ -1,4 +1,7 @@
 mod cpu;
-mod display;
+mod interpreter;
 mod keyboard;
 mod memory;
+mod screen;
+
+pub use interpreter::Interpreter;
