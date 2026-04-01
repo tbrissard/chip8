@@ -4,6 +4,14 @@ use std::{
 };
 
 use num_traits::{Num, WrappingShl, WrappingShr};
+use ratatui::{
+    buffer::Buffer,
+    layout::Rect,
+    style::Stylize,
+    symbols::border,
+    text::{Line, ToText},
+    widgets::{Block, Paragraph, Widget},
+};
 
 pub(crate) const DIGITS: [[u8; 5]; 16] = [
     [0xF0, 0x90, 0x90, 0x90, 0xF0],
@@ -64,26 +72,20 @@ impl<T, const N: usize> Screen<T, N>
 where
     T: Num + Copy + WrappingShl + WrappingShr + BitAnd<Output = T> + From<u8> + BitXorAssign,
 {
-    const PIXEL_ON: char = '*';
+    const PIXEL_ON: char = '█';
     const PIXEL_OFF: char = ' ';
 
-    const WIDTH: usize = size_of::<T>() * 8;
-    const HEIGHT: usize = N;
+    pub(super) const WIDTH: usize = size_of::<T>() * 8;
+    pub(super) const HEIGHT: usize = N;
 
     pub(crate) fn new() -> Self {
-        Self {
-            pixels: [T::zero(); N],
-        }
+        Self::default()
     }
 
     pub(crate) fn clear(&mut self) {
         for p in &mut self.pixels {
             *p = T::zero()
         }
-    }
-
-    fn pixels(&self) -> &[T; N] {
-        &self.pixels
     }
 
     /// toggles pixels by XORing the sprite onto the screen, returns true if any pixel was "turned "off"
@@ -151,6 +153,26 @@ where
         }
 
         Ok(())
+    }
+}
+
+impl Widget for &StandardScreen {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        let title = Line::from("Display".bold());
+
+        let block = Block::bordered()
+            .title(title.centered())
+            .border_set(border::THICK);
+
+        let pixels = self.to_text();
+
+        Paragraph::new(pixels)
+            .centered()
+            .block(block)
+            .render(area, buf);
     }
 }
 

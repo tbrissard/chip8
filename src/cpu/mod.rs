@@ -4,7 +4,7 @@ use rand::{RngExt, rngs::ThreadRng};
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     style::Stylize,
     symbols::border,
     text::{Line, ToText},
@@ -33,6 +33,7 @@ pub struct Cpu {
 
     rng: ThreadRng,
     exit: bool,
+    last_instruction: Option<Instructions>,
 }
 
 const START_ADDRESS: Address = 0x200;
@@ -48,10 +49,11 @@ impl Default for Cpu {
             registers,
             keyboard: Keyboard::default(),
             memory: Memory::default(),
-            screen: StandardScreen::default(),
+            screen: StandardScreen::new(),
 
             rng: ThreadRng::default(),
             exit: false,
+            last_instruction: None,
         }
     }
 }
@@ -68,10 +70,15 @@ impl Cpu {
         let interval = Duration::from_millis(1000 / REFRESH_RATE);
         let mut next_refresh = Instant::now() + interval;
 
-        let start = Instant::now();
         while !self.exit {
+            let pc = self.registers.program_counter;
+
             let instr = self.next_instr()?;
             self.execute(instr)?;
+
+            if self.registers.program_counter == pc {
+                self.exit = true;
+            }
 
             terminal
                 .draw(|frame| self.draw(frame))
@@ -82,17 +89,30 @@ impl Cpu {
 
             std::thread::sleep(next_refresh - Instant::now());
             next_refresh += interval;
-
-            if start.elapsed() > Duration::from_secs(30) {
-                self.exit = true;
-            }
         }
 
         Ok(())
     }
 
     fn draw(&self, frame: &mut Frame) {
-        frame.render_widget(self, frame.area());
+        let layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![
+                Constraint::Length(StandardScreen::WIDTH as u16 + 2),
+                Constraint::Fill(1),
+                Constraint::Fill(1),
+            ])
+            .split(frame.area());
+
+        frame.render_widget(&self.screen, layout[0]);
+        Line::from(
+            self.last_instruction
+                .map(|instr| format!("Instr: {instr}",))
+                .unwrap_or_default(),
+        )
+        .centered()
+        .render(layout[1], frame.buffer_mut());
+        frame.render_widget(&self.registers, layout[2]);
     }
 
     fn skip_instr(&mut self) {
@@ -167,7 +187,8 @@ impl Cpu {
 
             Instructions::LD(vx, kk) => self.set_v_reg(vx, kk),
 
-            Instructions::ADD(vx, kk) => self.set_v_reg(vx, self.v_reg(vx) + kk),
+            // Instructions::ADD(vx, kk) => {self.set_v_reg(vx, self.v_reg(vx) + kk)},
+            Instructions::ADD(vx, kk) => self.set_v_reg(vx, self.v_reg(vx).wrapping_add(kk)),
 
             Instructions::LD_Regs(vx, vy) => self.set_v_reg(vx, self.v_reg(vy)),
 
@@ -290,28 +311,9 @@ impl Cpu {
                 }
             }
         }
+        self.last_instruction = Some(instr);
 
         Ok(())
-    }
-}
-
-impl Widget for &Cpu {
-    fn render(self, area: Rect, buf: &mut Buffer)
-    where
-        Self: Sized,
-    {
-        let title = Line::from("Chip8 interpreter".bold());
-
-        let block = Block::bordered()
-            .title(title.centered())
-            .border_set(border::THICK);
-
-        let screen = self.screen.to_text();
-
-        Paragraph::new(screen)
-            .centered()
-            .block(block)
-            .render(area, buf);
     }
 }
 

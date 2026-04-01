@@ -1,3 +1,12 @@
+use ratatui::{
+    buffer::Buffer,
+    layout::{Constraint, Direction, Layout, Rect},
+    style::Stylize,
+    symbols::border,
+    text::{Line, Text},
+    widgets::{Block, Widget},
+};
+
 use crate::memory::Address;
 
 /// General purpose register
@@ -56,6 +65,52 @@ impl Registers {
 
     pub(super) fn top_stack(&self) -> Option<Address> {
         (self.stack_pointer > 0).then_some(self.stack[self.stack_pointer as usize - 1])
+    }
+}
+
+impl Widget for &Registers {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        let layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![Constraint::Fill(1), Constraint::Fill(1)])
+            .split(area);
+
+        let title = Line::from("Registers".bold());
+        let block = Block::bordered()
+            .title(title.centered())
+            .border_set(border::THICK);
+
+        let v_registers = Text::from(
+            self.v_registers
+                .iter()
+                .enumerate()
+                .map(|(i, vreg)| Line::from(format!("V{i}: {vreg:3}")))
+                .collect::<Vec<_>>(),
+        )
+        .centered();
+
+        let mut others = vec![
+            Line::from(format!("Program Counter: {:#05X}", self.program_counter)),
+            Line::from(format!("I: {:#05X}", self.i)),
+            Line::from(""),
+            Line::from(format!("Delay Timer: {}", self.delay_timer)),
+            Line::from(format!("Sound Timer: {}", self.sound_timer)),
+            Line::from(""),
+            Line::from(format!("Stack Pointer: {}", self.stack_pointer)),
+        ];
+        others.extend(
+            self.stack
+                .iter()
+                .map(|addr| format!("{addr:#X}"))
+                .map(Line::from),
+        );
+        let others = Text::from(others);
+
+        v_registers.render(layout[0], buf);
+        others.render(layout[1], buf);
     }
 }
 

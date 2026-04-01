@@ -7,7 +7,10 @@ pub struct Interpreter {}
 
 impl Interpreter {
     pub fn run(program: PathBuf) -> Result<(), InterpreterError> {
-        let program = std::fs::read(program)?;
+        let program = std::fs::read(&program).map_err(|e| InterpreterError::Io {
+            error: e,
+            path: program,
+        })?;
         let mut cpu = Cpu::load_program(program.as_slice())?;
         ratatui::run(|terminal| cpu.run(terminal))?;
         Ok(())
@@ -19,6 +22,9 @@ pub enum InterpreterError {
     #[error("execution error: {0}")]
     Execution(#[from] ExecutionError),
 
-    #[error("io error: {0}")]
-    Io(#[from] std::io::Error),
+    #[error("{error}: {path}")]
+    Io {
+        error: std::io::Error,
+        path: PathBuf,
+    },
 }

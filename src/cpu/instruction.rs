@@ -1,8 +1,10 @@
+use std::fmt::Display;
+
 use crate::{cpu::registers::VRegister, memory::Address};
 
 type Value = u8;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 pub(super) enum Instructions {
     /// Clear the display.
@@ -242,9 +244,63 @@ impl TryFrom<u16> for Instructions {
     }
 }
 
+impl std::fmt::Display for Instructions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        const WIDTH: usize = 20;
+        match self {
+            Instructions::CLS => write!(f, "{:<WIDTH$}", "CLS"),
+            Instructions::RET => write!(f, "{:<WIDTH$}", "RET"),
+            Instructions::JP(addr) => write!(f, "{:<WIDTH$}", format!("JP {:#05X}", addr)),
+            Instructions::CALL(addr) => write!(f, "{:<WIDTH$}", format!("CALL {:#05X}", addr)),
+            Instructions::SE_Value(vx, kk) => {
+                write!(f, "{:<WIDTH$}", format!("SE V{}, {}", vx, kk))
+            }
+            Instructions::SNE(vx, kk) => {
+                write!(f, "{:<WIDTH$}", format!("SNE V{}, {}", vx, kk))
+            }
+            Instructions::SE_Reg(vx, vy) => write!(f, "{:<WIDTH$}", format!("SE V{}, V{}", vx, vy)),
+            Instructions::LD(vx, kk) => write!(f, "{:<WIDTH$}", format!("LD V{}, {}", vx, kk)),
+            Instructions::ADD(vx, kk) => write!(f, "{:<WIDTH$}", format!("ADD V{}, {}", vx, kk)),
+            Instructions::LD_Regs(vx, vy) => {
+                write!(f, "{:<WIDTH$}", format!("LD V{}, V{}", vx, vy))
+            }
+            Instructions::OR(vx, vy) => write!(f, "{:<WIDTH$}", format!("OR V{}, V{}", vx, vy)),
+            Instructions::AND(vx, vy) => write!(f, "{:<WIDTH$}", format!("AND V{}, V{}", vx, vy)),
+            Instructions::XOR(vx, vy) => write!(f, "{:<WIDTH$}", format!("XOR V{}, V{}", vx, vy)),
+            Instructions::ADD_Reg(vx, vy) => {
+                write!(f, "{:<WIDTH$}", format!("ADD V{}, V{}", vx, vy))
+            }
+            Instructions::SUB(vx, vy) => write!(f, "{:<WIDTH$}", format!("SUB V{}, V{}", vx, vy)),
+            Instructions::SHR(vx) => write!(f, "{:<WIDTH$}", format!("SHR V{}", vx)),
+            Instructions::SUBN(vx, vy) => write!(f, "{:<WIDTH$}", format!("SUBN V{}, V{}", vx, vy)),
+            Instructions::SHL(vx) => write!(f, "{:<WIDTH$}", format!("SHL V{}", vx)),
+            Instructions::SNE_Reg(vx, vy) => {
+                write!(f, "{:<WIDTH$}", format!("SNE V{}, V{}", vx, vy))
+            }
+            Instructions::LD_I(addr) => write!(f, "{:<WIDTH$}", format!("LD I, {:#05X}", addr)),
+            Instructions::JP_V0(addr) => write!(f, "{:<WIDTH$}", format!("JP V0, {:#05X}", addr)),
+            Instructions::RND(vx, kk) => write!(f, "{:<WIDTH$}", format!("RND V{}, {}", vx, kk)),
+            Instructions::DRW(vx, vy, n) => {
+                write!(f, "{:<WIDTH$}", format!("DRW V{}, V{}, {}", vx, vy, n))
+            }
+            Instructions::SKP(vx) => write!(f, "{:<WIDTH$}", format!("SKP V{}", vx)),
+            Instructions::SKNP(vx) => write!(f, "{:<WIDTH$}", format!("SKNP V{}", vx)),
+            Instructions::LD_DT(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, DT", vx)),
+            Instructions::LD_K(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, K", vx)),
+            Instructions::SET_DT(vx) => write!(f, "{:<WIDTH$}", format!("LD DT, V{}", vx)),
+            Instructions::SET_ST(vx) => write!(f, "{:<WIDTH$}", format!("LD ST, V{}", vx)),
+            Instructions::ADD_I(vx) => write!(f, "{:<WIDTH$}", format!("ADD I, V{}", vx)),
+            Instructions::LD_F(vx) => write!(f, "{:<WIDTH$}", format!("LD F, V{}", vx)),
+            Instructions::LD_B(vx) => write!(f, "{:<WIDTH$}", format!("LD B, V{}", vx)),
+            Instructions::LD_MEM_I(vx) => write!(f, "{:<WIDTH$}", format!("LD [I], V{}", vx)),
+            Instructions::LD_I_MEM(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, [I]", vx)),
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum InstructionsError {
-    #[error("{:X} is not a valid instruction", u16::from_be_bytes(*.0))]
+    #[error("{:#06X} is not a valid instruction", u16::from_be_bytes(*.0))]
     InvalidInstruction([u8; 2]),
 }
 
