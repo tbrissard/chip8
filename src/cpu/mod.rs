@@ -3,16 +3,12 @@ use std::time::{Duration, Instant};
 use rand::{RngExt, rngs::ThreadRng};
 use ratatui::{
     DefaultTerminal, Frame,
-    buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
-    style::Stylize,
-    symbols::border,
-    text::{Line, ToText},
-    widgets::{Block, Paragraph, Widget},
+    layout::{Constraint, Layout},
 };
 
 use crate::{
     cpu::{
+        history::History,
         instruction::{Instructions, InstructionsError},
         registers::{Registers, RegistersError, VRegister},
     },
@@ -21,6 +17,7 @@ use crate::{
     screen::StandardScreen,
 };
 
+mod history;
 mod instruction;
 mod registers;
 
@@ -31,9 +28,10 @@ pub struct Cpu {
     memory: Memory,
     pub(crate) screen: StandardScreen,
 
+    history: History,
+
     rng: ThreadRng,
     exit: bool,
-    last_instruction: Option<Instructions>,
 }
 
 const START_ADDRESS: Address = 0x200;
@@ -51,9 +49,10 @@ impl Default for Cpu {
             memory: Memory::default(),
             screen: StandardScreen::new(),
 
+            history: History::new(),
+
             rng: ThreadRng::default(),
             exit: false,
-            last_instruction: None,
         }
     }
 }
@@ -95,23 +94,22 @@ impl Cpu {
     }
 
     fn draw(&self, frame: &mut Frame) {
-        let layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(vec![
-                Constraint::Length(StandardScreen::WIDTH as u16 + 2),
-                Constraint::Fill(1),
-                Constraint::Fill(1),
-            ])
-            .split(frame.area());
+        let layout = Layout::horizontal(vec![
+            Constraint::Length(StandardScreen::WIDTH as u16 + 2),
+            Constraint::Length(17),
+            Constraint::Length(35),
+        ])
+        // .flex(ratatui::layout::Flex::Start)
+        .split(frame.area());
 
-        frame.render_widget(&self.screen, layout[0]);
-        Line::from(
-            self.last_instruction
-                .map(|instr| format!("Instr: {instr}",))
-                .unwrap_or_default(),
-        )
-        .centered()
-        .render(layout[1], frame.buffer_mut());
+        let inner_layout = Layout::vertical(vec![
+            Constraint::Length(StandardScreen::HEIGHT as u16 + 2),
+            Constraint::Fill(1),
+        ])
+        .split(layout[0]);
+
+        frame.render_widget(&self.screen, inner_layout[0]);
+        frame.render_widget(&self.history, layout[1]);
         frame.render_widget(&self.registers, layout[2]);
     }
 
@@ -311,7 +309,8 @@ impl Cpu {
                 }
             }
         }
-        self.last_instruction = Some(instr);
+
+        self.history.push(instr);
 
         Ok(())
     }
@@ -361,7 +360,7 @@ mod tests {
         let pc = int.registers.program_counter;
 
         int.execute(Instructions::CALL(ADDR)).unwrap();
-        assert_eq!(pc, int.registers.top_stack().unwrap());
+        assert_eq!(pc, int.registers._top_stack().unwrap());
         assert_eq!(int.registers.program_counter, ADDR);
     }
 

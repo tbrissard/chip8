@@ -1,6 +1,6 @@
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Layout, Rect},
     style::Stylize,
     symbols::border,
     text::{Line, Text},
@@ -63,7 +63,7 @@ impl Registers {
         Ok(addr)
     }
 
-    pub(super) fn top_stack(&self) -> Option<Address> {
+    pub(super) fn _top_stack(&self) -> Option<Address> {
         (self.stack_pointer > 0).then_some(self.stack[self.stack_pointer as usize - 1])
     }
 }
@@ -73,21 +73,21 @@ impl Widget for &Registers {
     where
         Self: Sized,
     {
-        let layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(vec![Constraint::Fill(1), Constraint::Fill(1)])
-            .split(area);
-
         let title = Line::from("Registers".bold());
         let block = Block::bordered()
             .title(title.centered())
             .border_set(border::THICK);
+        let block_area = block.inner(area);
+
+        let layout = Layout::horizontal(vec![Constraint::Length(8), Constraint::Length(22)])
+            .spacing(3)
+            .split(block_area);
 
         let v_registers = Text::from(
             self.v_registers
                 .iter()
                 .enumerate()
-                .map(|(i, vreg)| Line::from(format!("V{i}: {vreg:3}")))
+                .map(|(i, vreg)| Line::from(format!("V{i:2}: {vreg:3}")))
                 .collect::<Vec<_>>(),
         )
         .centered();
@@ -111,6 +111,7 @@ impl Widget for &Registers {
 
         v_registers.render(layout[0], buf);
         others.render(layout[1], buf);
+        block.render(area, buf);
     }
 }
 
@@ -136,7 +137,7 @@ mod tests {
 
         assert_eq!(regs.pop_stack(), Err(RegistersError::StackEmpty));
         assert_eq!(regs.push_stack(0x200), Ok(()));
-        assert_eq!(regs.top_stack(), Some(0x200));
+        assert_eq!(regs._top_stack(), Some(0x200));
         assert_eq!(regs.pop_stack(), Ok(0x200));
     }
 

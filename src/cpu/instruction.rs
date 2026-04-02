@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use crate::{cpu::registers::VRegister, memory::Address};
 
 type Value = u8;
