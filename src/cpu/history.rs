@@ -2,15 +2,16 @@ use std::fmt::Display;
 
 use ratatui::{
     style::Stylize,
+    symbols::border,
     text::{Line, ToText},
     widgets::{Block, Paragraph, Widget},
 };
 
-use crate::cpu::Instructions;
+use crate::cpu::Instruction;
 
 #[derive(Debug, Default)]
 pub(crate) struct History {
-    inner: Vec<Instructions>,
+    inner: Vec<Instruction>,
 }
 
 impl History {
@@ -18,7 +19,7 @@ impl History {
         Self::default()
     }
 
-    pub(super) fn push(&mut self, instr: Instructions) {
+    pub(super) fn push(&mut self, instr: Instruction) {
         self.inner.push(instr);
     }
 
@@ -33,7 +34,7 @@ impl Widget for &History {
         Self: Sized,
     {
         let title = Line::from("Instructions").centered().bold();
-        let block = Block::bordered().title(title);
+        let block = Block::bordered().border_set(border::THICK).title(title);
 
         let history = self.to_text();
         let offset = (history.height() as u16).saturating_sub(area.height);

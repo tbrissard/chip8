@@ -4,7 +4,7 @@ type Value = u8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
-pub(super) enum Instructions {
+pub(super) enum Instruction {
     /// Clear the display.
     CLS,
 
@@ -190,7 +190,7 @@ fn from_low_12(a: u8, b: u8, c: u8) -> u16 {
     ((a as u16) << 8) | ((b as u16) << 4) | (c as u16)
 }
 
-impl TryFrom<&[u8; 2]> for Instructions {
+impl TryFrom<&[u8; 2]> for Instruction {
     type Error = InstructionsError;
 
     fn try_from(value: &[u8; 2]) -> Result<Self, Self::Error> {
@@ -234,7 +234,7 @@ impl TryFrom<&[u8; 2]> for Instructions {
     }
 }
 
-impl TryFrom<u16> for Instructions {
+impl TryFrom<u16> for Instruction {
     type Error = InstructionsError;
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
@@ -242,56 +242,56 @@ impl TryFrom<u16> for Instructions {
     }
 }
 
-impl std::fmt::Display for Instructions {
+impl std::fmt::Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         const WIDTH: usize = 20;
         match self {
-            Instructions::CLS => write!(f, "{:<WIDTH$}", "CLS"),
-            Instructions::RET => write!(f, "{:<WIDTH$}", "RET"),
-            Instructions::JP(addr) => write!(f, "{:<WIDTH$}", format!("JP {:#05X}", addr)),
-            Instructions::CALL(addr) => write!(f, "{:<WIDTH$}", format!("CALL {:#05X}", addr)),
-            Instructions::SE_Value(vx, kk) => {
+            Instruction::CLS => write!(f, "{:<WIDTH$}", "CLS"),
+            Instruction::RET => write!(f, "{:<WIDTH$}", "RET"),
+            Instruction::JP(addr) => write!(f, "{:<WIDTH$}", format!("JP {:#05X}", addr)),
+            Instruction::CALL(addr) => write!(f, "{:<WIDTH$}", format!("CALL {:#05X}", addr)),
+            Instruction::SE_Value(vx, kk) => {
                 write!(f, "{:<WIDTH$}", format!("SE V{}, {}", vx, kk))
             }
-            Instructions::SNE(vx, kk) => {
+            Instruction::SNE(vx, kk) => {
                 write!(f, "{:<WIDTH$}", format!("SNE V{}, {}", vx, kk))
             }
-            Instructions::SE_Reg(vx, vy) => write!(f, "{:<WIDTH$}", format!("SE V{}, V{}", vx, vy)),
-            Instructions::LD(vx, kk) => write!(f, "{:<WIDTH$}", format!("LD V{}, {}", vx, kk)),
-            Instructions::ADD(vx, kk) => write!(f, "{:<WIDTH$}", format!("ADD V{}, {}", vx, kk)),
-            Instructions::LD_Regs(vx, vy) => {
+            Instruction::SE_Reg(vx, vy) => write!(f, "{:<WIDTH$}", format!("SE V{}, V{}", vx, vy)),
+            Instruction::LD(vx, kk) => write!(f, "{:<WIDTH$}", format!("LD V{}, {}", vx, kk)),
+            Instruction::ADD(vx, kk) => write!(f, "{:<WIDTH$}", format!("ADD V{}, {}", vx, kk)),
+            Instruction::LD_Regs(vx, vy) => {
                 write!(f, "{:<WIDTH$}", format!("LD V{}, V{}", vx, vy))
             }
-            Instructions::OR(vx, vy) => write!(f, "{:<WIDTH$}", format!("OR V{}, V{}", vx, vy)),
-            Instructions::AND(vx, vy) => write!(f, "{:<WIDTH$}", format!("AND V{}, V{}", vx, vy)),
-            Instructions::XOR(vx, vy) => write!(f, "{:<WIDTH$}", format!("XOR V{}, V{}", vx, vy)),
-            Instructions::ADD_Reg(vx, vy) => {
+            Instruction::OR(vx, vy) => write!(f, "{:<WIDTH$}", format!("OR V{}, V{}", vx, vy)),
+            Instruction::AND(vx, vy) => write!(f, "{:<WIDTH$}", format!("AND V{}, V{}", vx, vy)),
+            Instruction::XOR(vx, vy) => write!(f, "{:<WIDTH$}", format!("XOR V{}, V{}", vx, vy)),
+            Instruction::ADD_Reg(vx, vy) => {
                 write!(f, "{:<WIDTH$}", format!("ADD V{}, V{}", vx, vy))
             }
-            Instructions::SUB(vx, vy) => write!(f, "{:<WIDTH$}", format!("SUB V{}, V{}", vx, vy)),
-            Instructions::SHR(vx) => write!(f, "{:<WIDTH$}", format!("SHR V{}", vx)),
-            Instructions::SUBN(vx, vy) => write!(f, "{:<WIDTH$}", format!("SUBN V{}, V{}", vx, vy)),
-            Instructions::SHL(vx) => write!(f, "{:<WIDTH$}", format!("SHL V{}", vx)),
-            Instructions::SNE_Reg(vx, vy) => {
+            Instruction::SUB(vx, vy) => write!(f, "{:<WIDTH$}", format!("SUB V{}, V{}", vx, vy)),
+            Instruction::SHR(vx) => write!(f, "{:<WIDTH$}", format!("SHR V{}", vx)),
+            Instruction::SUBN(vx, vy) => write!(f, "{:<WIDTH$}", format!("SUBN V{}, V{}", vx, vy)),
+            Instruction::SHL(vx) => write!(f, "{:<WIDTH$}", format!("SHL V{}", vx)),
+            Instruction::SNE_Reg(vx, vy) => {
                 write!(f, "{:<WIDTH$}", format!("SNE V{}, V{}", vx, vy))
             }
-            Instructions::LD_I(addr) => write!(f, "{:<WIDTH$}", format!("LD I, {:#05X}", addr)),
-            Instructions::JP_V0(addr) => write!(f, "{:<WIDTH$}", format!("JP V0, {:#05X}", addr)),
-            Instructions::RND(vx, kk) => write!(f, "{:<WIDTH$}", format!("RND V{}, {}", vx, kk)),
-            Instructions::DRW(vx, vy, n) => {
+            Instruction::LD_I(addr) => write!(f, "{:<WIDTH$}", format!("LD I, {:#05X}", addr)),
+            Instruction::JP_V0(addr) => write!(f, "{:<WIDTH$}", format!("JP V0, {:#05X}", addr)),
+            Instruction::RND(vx, kk) => write!(f, "{:<WIDTH$}", format!("RND V{}, {}", vx, kk)),
+            Instruction::DRW(vx, vy, n) => {
                 write!(f, "{:<WIDTH$}", format!("DRW V{}, V{}, {}", vx, vy, n))
             }
-            Instructions::SKP(vx) => write!(f, "{:<WIDTH$}", format!("SKP V{}", vx)),
-            Instructions::SKNP(vx) => write!(f, "{:<WIDTH$}", format!("SKNP V{}", vx)),
-            Instructions::LD_DT(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, DT", vx)),
-            Instructions::LD_K(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, K", vx)),
-            Instructions::SET_DT(vx) => write!(f, "{:<WIDTH$}", format!("LD DT, V{}", vx)),
-            Instructions::SET_ST(vx) => write!(f, "{:<WIDTH$}", format!("LD ST, V{}", vx)),
-            Instructions::ADD_I(vx) => write!(f, "{:<WIDTH$}", format!("ADD I, V{}", vx)),
-            Instructions::LD_F(vx) => write!(f, "{:<WIDTH$}", format!("LD F, V{}", vx)),
-            Instructions::LD_B(vx) => write!(f, "{:<WIDTH$}", format!("LD B, V{}", vx)),
-            Instructions::LD_MEM_I(vx) => write!(f, "{:<WIDTH$}", format!("LD [I], V{}", vx)),
-            Instructions::LD_I_MEM(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, [I]", vx)),
+            Instruction::SKP(vx) => write!(f, "{:<WIDTH$}", format!("SKP V{}", vx)),
+            Instruction::SKNP(vx) => write!(f, "{:<WIDTH$}", format!("SKNP V{}", vx)),
+            Instruction::LD_DT(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, DT", vx)),
+            Instruction::LD_K(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, K", vx)),
+            Instruction::SET_DT(vx) => write!(f, "{:<WIDTH$}", format!("LD DT, V{}", vx)),
+            Instruction::SET_ST(vx) => write!(f, "{:<WIDTH$}", format!("LD ST, V{}", vx)),
+            Instruction::ADD_I(vx) => write!(f, "{:<WIDTH$}", format!("ADD I, V{}", vx)),
+            Instruction::LD_F(vx) => write!(f, "{:<WIDTH$}", format!("LD F, V{}", vx)),
+            Instruction::LD_B(vx) => write!(f, "{:<WIDTH$}", format!("LD B, V{}", vx)),
+            Instruction::LD_MEM_I(vx) => write!(f, "{:<WIDTH$}", format!("LD [I], V{}", vx)),
+            Instruction::LD_I_MEM(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, [I]", vx)),
         }
     }
 }
@@ -304,11 +304,11 @@ pub enum InstructionsError {
 
 #[cfg(test)]
 mod tests {
-    use super::{Instructions, InstructionsError};
+    use super::{Instruction, InstructionsError};
 
     #[test]
     fn test_non_existent_instruction() {
-        let instr = Instructions::try_from(0x0000);
+        let instr = Instruction::try_from(0x0000);
         assert_eq!(
             instr,
             Err(InstructionsError::InvalidInstruction([0x00, 0x00]))
@@ -317,237 +317,216 @@ mod tests {
 
     #[test]
     fn test_parsing_cls() {
-        assert_eq!(Instructions::try_from(0x00E0), Ok(Instructions::CLS));
+        assert_eq!(Instruction::try_from(0x00E0), Ok(Instruction::CLS));
     }
 
     #[test]
     fn test_parsing_ret() {
-        assert_eq!(Instructions::try_from(0x00EE), Ok(Instructions::RET));
+        assert_eq!(Instruction::try_from(0x00EE), Ok(Instruction::RET));
     }
 
     #[test]
     fn test_parsing_jp() {
-        assert_eq!(Instructions::try_from(0x1200), Ok(Instructions::JP(0x200)))
+        assert_eq!(Instruction::try_from(0x1200), Ok(Instruction::JP(0x200)))
     }
 
     #[test]
     fn test_parsing_call() {
-        assert_eq!(
-            Instructions::try_from(0x2200),
-            Ok(Instructions::CALL(0x200))
-        )
+        assert_eq!(Instruction::try_from(0x2200), Ok(Instruction::CALL(0x200)))
     }
 
     #[test]
     fn test_parsing_se() {
         assert_eq!(
-            Instructions::try_from(0x3142),
-            Ok(Instructions::SE_Value(0x1, 0x42))
+            Instruction::try_from(0x3142),
+            Ok(Instruction::SE_Value(0x1, 0x42))
         )
     }
 
     #[test]
     fn test_parsing_sne() {
-        assert_eq!(
-            Instructions::try_from(0x4142),
-            Ok(Instructions::SNE(1, 0x42))
-        )
+        assert_eq!(Instruction::try_from(0x4142), Ok(Instruction::SNE(1, 0x42)))
     }
 
     #[test]
     fn test_parsing_se_reg() {
         assert_eq!(
-            Instructions::try_from(0x5120),
-            Ok(Instructions::SE_Reg(0x1, 0x2))
+            Instruction::try_from(0x5120),
+            Ok(Instruction::SE_Reg(0x1, 0x2))
         )
     }
 
     #[test]
     fn test_parsing_ld() {
         assert_eq!(
-            Instructions::try_from(0x6142),
-            Ok(Instructions::LD(0x1, 0x42))
+            Instruction::try_from(0x6142),
+            Ok(Instruction::LD(0x1, 0x42))
         )
     }
 
     #[test]
     fn test_parsing_add() {
         assert_eq!(
-            Instructions::try_from(0x7142),
-            Ok(Instructions::ADD(0x1, 0x42))
+            Instruction::try_from(0x7142),
+            Ok(Instruction::ADD(0x1, 0x42))
         )
     }
 
     #[test]
     fn test_parsing_ld_regs() {
         assert_eq!(
-            Instructions::try_from(0x8120),
-            Ok(Instructions::LD_Regs(0x1, 0x2))
+            Instruction::try_from(0x8120),
+            Ok(Instruction::LD_Regs(0x1, 0x2))
         )
     }
 
     #[test]
     fn test_parsing_or() {
-        assert_eq!(
-            Instructions::try_from(0x8121),
-            Ok(Instructions::OR(0x1, 0x2))
-        )
+        assert_eq!(Instruction::try_from(0x8121), Ok(Instruction::OR(0x1, 0x2)))
     }
 
     #[test]
     fn test_parsing_and() {
         assert_eq!(
-            Instructions::try_from(0x8122),
-            Ok(Instructions::AND(0x1, 0x2))
+            Instruction::try_from(0x8122),
+            Ok(Instruction::AND(0x1, 0x2))
         )
     }
 
     #[test]
     fn test_parsing_xor() {
         assert_eq!(
-            Instructions::try_from(0x8123),
-            Ok(Instructions::XOR(0x1, 0x2))
+            Instruction::try_from(0x8123),
+            Ok(Instruction::XOR(0x1, 0x2))
         )
     }
 
     #[test]
     fn test_parsing_add_reg() {
         assert_eq!(
-            Instructions::try_from(0x8124),
-            Ok(Instructions::ADD_Reg(0x1, 0x2))
+            Instruction::try_from(0x8124),
+            Ok(Instruction::ADD_Reg(0x1, 0x2))
         )
     }
 
     #[test]
     fn test_parsing_sub() {
         assert_eq!(
-            Instructions::try_from(0x8125),
-            Ok(Instructions::SUB(0x1, 0x2))
+            Instruction::try_from(0x8125),
+            Ok(Instruction::SUB(0x1, 0x2))
         )
     }
 
     #[test]
     fn test_parsing_shr() {
-        assert_eq!(Instructions::try_from(0x8126), Ok(Instructions::SHR(0x1)))
+        assert_eq!(Instruction::try_from(0x8126), Ok(Instruction::SHR(0x1)))
     }
 
     #[test]
     fn test_parsing_subn() {
         assert_eq!(
-            Instructions::try_from(0x8127),
-            Ok(Instructions::SUBN(0x1, 0x2))
+            Instruction::try_from(0x8127),
+            Ok(Instruction::SUBN(0x1, 0x2))
         )
     }
 
     #[test]
     fn test_parsing_shl() {
-        assert_eq!(Instructions::try_from(0x812E), Ok(Instructions::SHL(0x1)))
+        assert_eq!(Instruction::try_from(0x812E), Ok(Instruction::SHL(0x1)))
     }
 
     #[test]
     fn test_parsing_sne_reg() {
         assert_eq!(
-            Instructions::try_from(0x9120),
-            Ok(Instructions::SNE_Reg(0x1, 0x2))
+            Instruction::try_from(0x9120),
+            Ok(Instruction::SNE_Reg(0x1, 0x2))
         )
     }
 
     #[test]
     fn test_parsing_ld_i() {
-        assert_eq!(
-            Instructions::try_from(0xA200),
-            Ok(Instructions::LD_I(0x200))
-        )
+        assert_eq!(Instruction::try_from(0xA200), Ok(Instruction::LD_I(0x200)))
     }
 
     #[test]
     fn test_parsing_jp_v0() {
-        assert_eq!(
-            Instructions::try_from(0xB200),
-            Ok(Instructions::JP_V0(0x200))
-        )
+        assert_eq!(Instruction::try_from(0xB200), Ok(Instruction::JP_V0(0x200)))
     }
 
     #[test]
     fn test_parsing_rnd() {
         assert_eq!(
-            Instructions::try_from(0xC142),
-            Ok(Instructions::RND(0x1, 0x42))
+            Instruction::try_from(0xC142),
+            Ok(Instruction::RND(0x1, 0x42))
         )
     }
 
     #[test]
     fn test_parsing_drw() {
         assert_eq!(
-            Instructions::try_from(0xD123),
-            Ok(Instructions::DRW(0x1, 0x2, 0x3))
+            Instruction::try_from(0xD123),
+            Ok(Instruction::DRW(0x1, 0x2, 0x3))
         )
     }
 
     #[test]
     fn test_parsing_skp() {
-        assert_eq!(Instructions::try_from(0xE19E), Ok(Instructions::SKP(0x1)))
+        assert_eq!(Instruction::try_from(0xE19E), Ok(Instruction::SKP(0x1)))
     }
 
     #[test]
     fn test_parsing_sknp() {
-        assert_eq!(Instructions::try_from(0xE1A1), Ok(Instructions::SKNP(0x1)))
+        assert_eq!(Instruction::try_from(0xE1A1), Ok(Instruction::SKNP(0x1)))
     }
 
     #[test]
     fn test_parsing_ld_dt() {
-        assert_eq!(Instructions::try_from(0xF107), Ok(Instructions::LD_DT(0x1)))
+        assert_eq!(Instruction::try_from(0xF107), Ok(Instruction::LD_DT(0x1)))
     }
 
     #[test]
     fn test_parsing_ld_k() {
-        assert_eq!(Instructions::try_from(0xF10A), Ok(Instructions::LD_K(0x1)))
+        assert_eq!(Instruction::try_from(0xF10A), Ok(Instruction::LD_K(0x1)))
     }
 
     #[test]
     fn test_parsing_set_dt() {
-        assert_eq!(
-            Instructions::try_from(0xF115),
-            Ok(Instructions::SET_DT(0x1))
-        )
+        assert_eq!(Instruction::try_from(0xF115), Ok(Instruction::SET_DT(0x1)))
     }
 
     #[test]
     fn test_parsing_set_st() {
-        assert_eq!(
-            Instructions::try_from(0xF118),
-            Ok(Instructions::SET_ST(0x1))
-        )
+        assert_eq!(Instruction::try_from(0xF118), Ok(Instruction::SET_ST(0x1)))
     }
 
     #[test]
     fn test_parsing_add_i() {
-        assert_eq!(Instructions::try_from(0xF11E), Ok(Instructions::ADD_I(0x1)))
+        assert_eq!(Instruction::try_from(0xF11E), Ok(Instruction::ADD_I(0x1)))
     }
 
     #[test]
     fn test_parsing_ld_f() {
-        assert_eq!(Instructions::try_from(0xF129), Ok(Instructions::LD_F(0x1)))
+        assert_eq!(Instruction::try_from(0xF129), Ok(Instruction::LD_F(0x1)))
     }
 
     #[test]
     fn test_parsing_ld_b() {
-        assert_eq!(Instructions::try_from(0xF133), Ok(Instructions::LD_B(0x1)))
+        assert_eq!(Instruction::try_from(0xF133), Ok(Instruction::LD_B(0x1)))
     }
 
     #[test]
     fn test_parsing_ld_mem_i() {
         assert_eq!(
-            Instructions::try_from(0xF155),
-            Ok(Instructions::LD_MEM_I(0x1))
+            Instruction::try_from(0xF155),
+            Ok(Instruction::LD_MEM_I(0x1))
         )
     }
 
     #[test]
     fn test_parsing_ld_i_mem() {
         assert_eq!(
-            Instructions::try_from(0xF165),
-            Ok(Instructions::LD_I_MEM(0x1))
+            Instruction::try_from(0xF165),
+            Ok(Instruction::LD_I_MEM(0x1))
         )
     }
 }

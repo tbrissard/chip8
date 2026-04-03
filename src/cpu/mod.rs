@@ -9,7 +9,7 @@ use ratatui::{
 use crate::{
     cpu::{
         history::History,
-        instruction::{Instructions, InstructionsError},
+        instruction::{Instruction, InstructionsError},
         registers::{Registers, RegistersError, VRegister},
     },
     keyboard::{Keyboard, KeyboardError},
@@ -29,6 +29,15 @@ pub struct Cpu {
     pub(crate) screen: StandardScreen,
 
     history: History,
+
+    clock_cycle_interval: Duration,
+    next_clock_cycle: Instant,
+
+    timer_cycles_interval: Duration,
+    next_timer_cycle: Instant,
+
+    screen_refresh_interval: Duration,
+    next_screen_refresh: Instant,
 
     rng: ThreadRng,
     exit: bool,
@@ -51,6 +60,17 @@ impl Default for Cpu {
 
             history: History::new(),
 
+            clock_cycle_interval: Duration::from_millis(1000 / Self::DEFAULT_CLOCK_FREQUENCY),
+            next_clock_cycle: Instant::now(),
+
+            timer_cycles_interval: Duration::from_millis(1000 / Self::TIMER_FREQUENCY),
+            next_timer_cycle: Instant::now(),
+
+            screen_refresh_interval: Duration::from_millis(
+                1000 / Self::DEFAULT_SCREEN_REFRESH_FREQUENCY,
+            ),
+            next_screen_refresh: Instant::now(),
+
             rng: ThreadRng::default(),
             exit: false,
         }
@@ -58,17 +78,22 @@ impl Default for Cpu {
 }
 
 impl Cpu {
+    const DEFAULT_CLOCK_FREQUENCY: u64 = 60;
+    const TIMER_FREQUENCY: u64 = 60;
+    const DEFAULT_SCREEN_REFRESH_FREQUENCY: u64 = 60;
+
     pub(crate) fn load_program(bytes: &[u8]) -> Result<Cpu, ExecutionError> {
         let mut cpu = Self::default();
         cpu.memory.store(bytes, START_ADDRESS)?;
         Ok(cpu)
     }
 
-    pub(crate) fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<(), ExecutionError> {
-        const REFRESH_RATE: u64 = 60;
-        let interval = Duration::from_millis(1000 / REFRESH_RATE);
-        let mut next_refresh = Instant::now() + interval;
+    pub(crate) fn with_clock_speed(mut self, frequency: u64) -> Self {
+        self.clock_cycle_interval = Duration::from_millis(1000 / frequency);
+        self
+    }
 
+    pub(crate) fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<(), ExecutionError> {
         while !self.exit {
             let pc = self.registers.program_counter;
 
@@ -79,15 +104,26 @@ impl Cpu {
                 self.exit = true;
             }
 
-            terminal
-                .draw(|frame| self.draw(frame))
-                .map_err(ExecutionError::Drawing)?;
+            let now = Instant::now();
 
-            self.decrease_delay_timer();
-            self.decrease_sound_timer();
+            if now > self.next_screen_refresh {
+                self.next_screen_refresh += self.screen_refresh_interval;
+                terminal
+                    .draw(|frame| self.draw(frame))
+                    .map_err(ExecutionError::Drawing)?;
+            }
 
-            std::thread::sleep(next_refresh - Instant::now());
-            next_refresh += interval;
+            if now > self.next_timer_cycle {
+                self.next_timer_cycle += self.timer_cycles_interval;
+                self.decrease_delay_timer();
+                self.decrease_sound_timer();
+            }
+
+            std::thread::sleep(
+                self.next_clock_cycle
+                    .saturating_duration_since(Instant::now()),
+            );
+            self.next_clock_cycle += self.clock_cycle_interval;
         }
 
         Ok(())
@@ -117,10 +153,10 @@ impl Cpu {
         self.registers.program_counter += 2;
     }
 
-    fn next_instr(&mut self) -> Result<Instructions, ExecutionError> {
+    fn next_instr(&mut self) -> Result<Instruction, ExecutionError> {
         let a = self.memory.read(self.registers.program_counter, 2)?;
         let a = <&[u8; 2]>::try_from(a).unwrap();
-        let instr: Instructions = a.try_into()?;
+        let instr: Instruction = a.try_into()?;
         self.registers.program_counter += 2;
         Ok(instr)
     }
@@ -149,101 +185,100 @@ impl Cpu {
         self.registers.sound_timer = self.registers.sound_timer.saturating_sub(1);
     }
 
-    fn execute(&mut self, instr: Instructions) -> Result<(), ExecutionError> {
+    fn execute(&mut self, instr: Instruction) -> Result<(), ExecutionError> {
         match instr {
-            Instructions::CLS => self.screen.clear(),
+            Instruction::CLS => self.screen.clear(),
 
-            Instructions::RET => {
+            Instruction::RET => {
                 let addr = self.registers.pop_stack()?;
                 self.set_pc(addr);
             }
 
-            Instructions::JP(addr) => self.set_pc(addr),
+            Instruction::JP(addr) => self.set_pc(addr),
 
-            Instructions::CALL(addr) => {
+            Instruction::CALL(addr) => {
                 self.registers.push_stack(self.registers.program_counter)?;
                 self.set_pc(addr);
             }
 
-            Instructions::SE_Value(vx, kk) => {
+            Instruction::SE_Value(vx, kk) => {
                 if self.v_reg(vx) == kk {
                     self.skip_instr();
                 }
             }
 
-            Instructions::SNE(vx, kk) => {
+            Instruction::SNE(vx, kk) => {
                 if self.v_reg(vx) != kk {
                     self.skip_instr();
                 }
             }
 
-            Instructions::SE_Reg(vx, vy) => {
+            Instruction::SE_Reg(vx, vy) => {
                 if self.v_reg(vx) == self.v_reg(vy) {
                     self.skip_instr();
                 }
             }
 
-            Instructions::LD(vx, kk) => self.set_v_reg(vx, kk),
+            Instruction::LD(vx, kk) => self.set_v_reg(vx, kk),
 
-            // Instructions::ADD(vx, kk) => {self.set_v_reg(vx, self.v_reg(vx) + kk)},
-            Instructions::ADD(vx, kk) => self.set_v_reg(vx, self.v_reg(vx).wrapping_add(kk)),
+            Instruction::ADD(vx, kk) => self.set_v_reg(vx, self.v_reg(vx).wrapping_add(kk)),
 
-            Instructions::LD_Regs(vx, vy) => self.set_v_reg(vx, self.v_reg(vy)),
+            Instruction::LD_Regs(vx, vy) => self.set_v_reg(vx, self.v_reg(vy)),
 
-            Instructions::OR(vx, vy) => self.set_v_reg(vx, self.v_reg(vx) | self.v_reg(vy)),
+            Instruction::OR(vx, vy) => self.set_v_reg(vx, self.v_reg(vx) | self.v_reg(vy)),
 
-            Instructions::AND(vx, vy) => self.set_v_reg(vx, self.v_reg(vx) & self.v_reg(vy)),
+            Instruction::AND(vx, vy) => self.set_v_reg(vx, self.v_reg(vx) & self.v_reg(vy)),
 
-            Instructions::XOR(vx, vy) => self.set_v_reg(vx, self.v_reg(vx) ^ self.v_reg(vy)),
+            Instruction::XOR(vx, vy) => self.set_v_reg(vx, self.v_reg(vx) ^ self.v_reg(vy)),
 
-            Instructions::ADD_Reg(vx, vy) => {
+            Instruction::ADD_Reg(vx, vy) => {
                 let (res, carry) = self.v_reg(vx).overflowing_add(self.v_reg(vy));
                 self.set_v_reg(vx, res);
                 self.set_f(carry.into());
             }
 
-            Instructions::SUB(vx, vy) => {
+            Instruction::SUB(vx, vy) => {
                 let (res, carry) = self.v_reg(vx).overflowing_sub(self.v_reg(vy));
                 self.set_v_reg(vx, res);
                 self.set_f((!carry).into());
             }
 
-            Instructions::SHR(vx) => {
+            Instruction::SHR(vx) => {
                 let value = self.v_reg(vx);
                 self.set_f(value & 1);
                 self.set_v_reg(vx, value >> 1);
             }
 
-            Instructions::SUBN(vx, vy) => {
+            Instruction::SUBN(vx, vy) => {
                 let (res, carry) = self.v_reg(vy).overflowing_sub(self.v_reg(vx));
                 self.set_v_reg(vx, res);
                 self.set_f((!carry).into());
             }
 
-            Instructions::SHL(vx) => {
+            Instruction::SHL(vx) => {
                 let value = self.v_reg(vx);
                 self.set_f(value & 1);
                 self.set_v_reg(vx, value << 1);
             }
 
-            Instructions::SNE_Reg(vx, vy) => {
+            Instruction::SNE_Reg(vx, vy) => {
                 if self.v_reg(vx) != self.v_reg(vy) {
                     self.skip_instr();
                 }
             }
 
-            Instructions::LD_I(addr) => self.registers.i = addr,
+            Instruction::LD_I(addr) => self.registers.i = addr,
 
-            Instructions::JP_V0(addr) => {
+            Instruction::JP_V0(addr) => {
                 self.set_pc(self.v_reg(0) as Address + addr);
             }
 
-            Instructions::RND(vx, kk) => {
+            Instruction::RND(vx, kk) => {
                 let rnd: u8 = self.rng.random();
                 self.set_v_reg(vx, rnd & kk);
             }
 
-            Instructions::DRW(vx, vy, n) => {
+            Instruction::DRW(vx, vy, n) => {
                 let sprite = self.memory.read(self.registers.i, n as Address)?.into();
                 let collision = self.screen.write_sprite(
                     &sprite,
@@ -253,31 +288,31 @@ impl Cpu {
                 self.set_f(collision.into());
             }
 
-            Instructions::SKP(vx) => {
+            Instruction::SKP(vx) => {
                 if self.keyboard.is_down(self.v_reg(vx).try_into()?) {
                     self.skip_instr();
                 }
             }
 
-            Instructions::SKNP(vx) => {
+            Instruction::SKNP(vx) => {
                 if self.keyboard.is_up(self.v_reg(vx).try_into()?) {
                     self.skip_instr();
                 }
             }
 
-            Instructions::LD_DT(vx) => self.set_v_reg(vx, self.registers.delay_timer),
+            Instruction::LD_DT(vx) => self.set_v_reg(vx, self.registers.delay_timer),
 
-            Instructions::LD_K(_) => todo!(),
+            Instruction::LD_K(_) => todo!(),
 
-            Instructions::SET_DT(vx) => self.registers.delay_timer = self.v_reg(vx),
+            Instruction::SET_DT(vx) => self.registers.delay_timer = self.v_reg(vx),
 
-            Instructions::SET_ST(vx) => self.registers.sound_timer = self.v_reg(vx),
+            Instruction::SET_ST(vx) => self.registers.sound_timer = self.v_reg(vx),
 
-            Instructions::ADD_I(vx) => self.registers.i += self.v_reg(vx) as Address,
+            Instruction::ADD_I(vx) => self.registers.i += self.v_reg(vx) as Address,
 
-            Instructions::LD_F(vx) => self.registers.i = memory::digit_addr(self.v_reg(vx)),
+            Instruction::LD_F(vx) => self.registers.i = memory::digit_addr(self.v_reg(vx)),
 
-            Instructions::LD_B(vx) => {
+            Instruction::LD_B(vx) => {
                 let value = self.v_reg(vx);
                 self.memory.store(&[value / 100], self.registers.i)?;
                 self.memory
@@ -285,7 +320,7 @@ impl Cpu {
                 self.memory.store(&[value % 10], self.registers.i + 2)?;
             }
 
-            Instructions::LD_MEM_I(vx) => {
+            Instruction::LD_MEM_I(vx) => {
                 for (value, addr) in self
                     .registers
                     .v_registers
@@ -297,7 +332,7 @@ impl Cpu {
                 }
             }
 
-            Instructions::LD_I_MEM(vx) => {
+            Instruction::LD_I_MEM(vx) => {
                 for (reg, addr) in self
                     .registers
                     .v_registers
@@ -348,7 +383,7 @@ mod tests {
     fn instruction_jp() {
         let mut int = create_cpu();
 
-        let res = int.execute(Instructions::JP(ADDR));
+        let res = int.execute(Instruction::JP(ADDR));
         assert!(res.is_ok());
         assert_eq!(int.registers.program_counter, ADDR);
     }
@@ -359,7 +394,7 @@ mod tests {
 
         let pc = int.registers.program_counter;
 
-        int.execute(Instructions::CALL(ADDR)).unwrap();
+        int.execute(Instruction::CALL(ADDR)).unwrap();
         assert_eq!(pc, int.registers._top_stack().unwrap());
         assert_eq!(int.registers.program_counter, ADDR);
     }
@@ -370,11 +405,11 @@ mod tests {
 
         int.registers.v_registers[0] = 1;
         let pc = int.registers.program_counter;
-        int.execute(Instructions::SE_Value(0, 1)).unwrap();
+        int.execute(Instruction::SE_Value(0, 1)).unwrap();
         assert_eq!(int.registers.program_counter, pc + 2);
 
         let pc = int.registers.program_counter;
-        int.execute(Instructions::SE_Value(0, 2)).unwrap();
+        int.execute(Instruction::SE_Value(0, 2)).unwrap();
         assert_ne!(int.registers.program_counter, pc + 2);
     }
 
@@ -384,11 +419,11 @@ mod tests {
 
         int.registers.v_registers[0] = 0;
         let pc = int.registers.program_counter;
-        int.execute(Instructions::SNE(0, 1)).unwrap();
+        int.execute(Instruction::SNE(0, 1)).unwrap();
         assert_eq!(int.registers.program_counter, pc + 2);
 
         let pc = int.registers.program_counter;
-        int.execute(Instructions::SNE(0, 0)).unwrap();
+        int.execute(Instruction::SNE(0, 0)).unwrap();
         assert_ne!(int.registers.program_counter, pc + 2);
     }
 
@@ -399,12 +434,12 @@ mod tests {
         let pc = int.registers.program_counter;
         int.registers.v_registers[0] = 1;
         int.registers.v_registers[1] = 1;
-        int.execute(Instructions::SE_Reg(0, 1)).unwrap();
+        int.execute(Instruction::SE_Reg(0, 1)).unwrap();
         assert_eq!(int.registers.program_counter, pc + 2);
 
         let pc = int.registers.program_counter;
         int.registers.v_registers[1] = 0;
-        int.execute(Instructions::SE_Reg(0, 1)).unwrap();
+        int.execute(Instruction::SE_Reg(0, 1)).unwrap();
         assert_ne!(int.registers.program_counter, pc + 2);
     }
 

@@ -108,7 +108,7 @@ pub(crate) struct Keyboard {
 }
 
 impl Keyboard {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn _new() -> Self {
         Self::default()
     }
 
@@ -120,7 +120,7 @@ impl Keyboard {
         self.key_states[Into::<u8>::into(k) as usize] == KeyState::Up
     }
 
-    pub(crate) fn handle_key_event(&mut self, key_event: KeyEvent) {
+    pub(crate) fn _handle_key_event(&mut self, key_event: KeyEvent) {
         if let Result::Ok(key) = Key::try_from(key_event.code) {
             self.key_states[Into::<u8>::into(key) as usize] = match key_event.kind {
                 KeyEventKind::Press => KeyState::Down,
