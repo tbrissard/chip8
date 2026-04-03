@@ -30,14 +30,10 @@ pub struct Cpu {
 
     history: History,
 
-    clock_cycle_interval: Duration,
-    next_clock_cycle: Instant,
-
-    timer_cycles_interval: Duration,
-    next_timer_cycle: Instant,
-
-    screen_refresh_interval: Duration,
-    next_screen_refresh: Instant,
+    tick_interval: Duration,
+    next_tick: Instant,
+    frame_interval: Duration,
+    next_frame: Instant,
 
     rng: ThreadRng,
     exit: bool,
@@ -60,16 +56,10 @@ impl Default for Cpu {
 
             history: History::new(),
 
-            clock_cycle_interval: Duration::from_millis(1000 / Self::DEFAULT_CLOCK_FREQUENCY),
-            next_clock_cycle: Instant::now(),
-
-            timer_cycles_interval: Duration::from_millis(1000 / Self::TIMER_FREQUENCY),
-            next_timer_cycle: Instant::now(),
-
-            screen_refresh_interval: Duration::from_millis(
-                1000 / Self::DEFAULT_SCREEN_REFRESH_FREQUENCY,
-            ),
-            next_screen_refresh: Instant::now(),
+            tick_interval: Duration::from_secs_f64(1.0 / Self::DEFAULT_CLOCK_SPEED),
+            next_tick: Instant::now(),
+            frame_interval: Duration::from_secs_f64(1.0 / Self::FRAME_RATE),
+            next_frame: Instant::now(),
 
             rng: ThreadRng::default(),
             exit: false,
@@ -78,9 +68,8 @@ impl Default for Cpu {
 }
 
 impl Cpu {
-    const DEFAULT_CLOCK_FREQUENCY: u64 = 60;
-    const TIMER_FREQUENCY: u64 = 60;
-    const DEFAULT_SCREEN_REFRESH_FREQUENCY: u64 = 60;
+    const DEFAULT_CLOCK_SPEED: f64 = 60.0;
+    const FRAME_RATE: f64 = 60.0;
 
     pub(crate) fn load_program(bytes: &[u8]) -> Result<Cpu, ExecutionError> {
         let mut cpu = Self::default();
@@ -89,7 +78,7 @@ impl Cpu {
     }
 
     pub(crate) fn with_clock_speed(mut self, frequency: u64) -> Self {
-        self.clock_cycle_interval = Duration::from_millis(1000 / frequency);
+        self.tick_interval = Duration::from_millis(1000 / frequency);
         self
     }
 
@@ -102,28 +91,19 @@ impl Cpu {
 
             if self.registers.program_counter == pc {
                 self.exit = true;
-            }
+            };
 
-            let now = Instant::now();
-
-            if now > self.next_screen_refresh {
-                self.next_screen_refresh += self.screen_refresh_interval;
+            if Instant::now() > self.next_frame {
+                self.next_frame += self.frame_interval;
+                self.decrease_delay_timer();
+                self.decrease_sound_timer();
                 terminal
                     .draw(|frame| self.draw(frame))
                     .map_err(ExecutionError::Drawing)?;
             }
 
-            if now > self.next_timer_cycle {
-                self.next_timer_cycle += self.timer_cycles_interval;
-                self.decrease_delay_timer();
-                self.decrease_sound_timer();
-            }
-
-            std::thread::sleep(
-                self.next_clock_cycle
-                    .saturating_duration_since(Instant::now()),
-            );
-            self.next_clock_cycle += self.clock_cycle_interval;
+            std::thread::sleep(self.next_tick.saturating_duration_since(Instant::now()));
+            self.next_tick += self.tick_interval;
         }
 
         Ok(())
