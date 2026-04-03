@@ -22,10 +22,6 @@ impl History {
     pub(super) fn push(&mut self, instr: Instruction) {
         self.inner.push(instr);
     }
-
-    // pub(super) fn pop(&mut self) -> Option<Instructions> {
-    //     self.inner.pop()
-    // }
 }
 
 impl Widget for &History {
@@ -37,7 +33,7 @@ impl Widget for &History {
         let block = Block::bordered().border_set(border::THICK).title(title);
 
         let history = self.to_text();
-        let offset = (history.height() as u16).saturating_sub(area.height);
+        let offset = (history.height() as u16).saturating_sub(area.height - 2);
 
         Paragraph::new(history)
             .centered()

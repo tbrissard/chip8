@@ -55,9 +55,9 @@ impl Memory {
     }
 
     pub(crate) fn read(&mut self, addr: Address, n: Address) -> Result<&[u8]> {
-        if Memory::is_reserved(addr) {
-            return Err(ReadError::ReservedAddr(addr).into());
-        }
+        // if Memory::is_reserved(addr) {
+        //     return Err(ReadError::ReservedAddr(addr).into());
+        // }
 
         if addr + n - 1 > MEMORY_SIZE {
             return Err(ReadError::OutOfBound(addr).into());
@@ -77,17 +77,17 @@ pub enum MemoryError {
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum WriteError {
-    #[error("address is out of bound ({0})")]
+    #[error("address is out of bound ({0:<#05X})")]
     OutOfBound(Address),
-    #[error("address is reserved ({0})")]
+    #[error("address is reserved ({0:<#05X})")]
     ReservedAddr(Address),
 }
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ReadError {
-    #[error("address is out of bound ({0})")]
+    #[error("address is out of bound ({0:<#05X})")]
     OutOfBound(Address),
-    #[error("address is reserved ({0})")]
+    #[error("address is reserved ({0:<#05X})")]
     ReservedAddr(Address),
 }
 

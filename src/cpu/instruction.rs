@@ -284,7 +284,7 @@ impl std::fmt::Display for Instruction {
             Instruction::SKP(vx) => write!(f, "{:<WIDTH$}", format!("SKP V{}", vx)),
             Instruction::SKNP(vx) => write!(f, "{:<WIDTH$}", format!("SKNP V{}", vx)),
             Instruction::LD_DT(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, DT", vx)),
-            Instruction::LD_K(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, K", vx)),
+            Instruction::LD_K(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, KEY", vx)),
             Instruction::SET_DT(vx) => write!(f, "{:<WIDTH$}", format!("LD DT, V{}", vx)),
             Instruction::SET_ST(vx) => write!(f, "{:<WIDTH$}", format!("LD ST, V{}", vx)),
             Instruction::ADD_I(vx) => write!(f, "{:<WIDTH$}", format!("ADD I, V{}", vx)),
