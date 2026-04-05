@@ -1,9 +1,7 @@
-use std::fmt::Display;
-
 use ratatui::{
     style::Stylize,
     symbols::border,
-    text::{Line, ToText},
+    text::{Line, Text, ToLine},
     widgets::{Block, Paragraph, Widget},
 };
 
@@ -32,22 +30,18 @@ impl Widget for &History {
         let title = Line::from("Instructions").centered().bold();
         let block = Block::bordered().border_set(border::THICK).title(title);
 
-        let history = self.to_text();
-        let offset = (history.height() as u16).saturating_sub(area.height - 2);
+        let available_height = area.height as usize - 2;
+
+        let history = Text::from(
+            self.inner[self.inner.len().saturating_sub(available_height)..self.inner.len()]
+                .iter()
+                .map(|instr| instr.to_line())
+                .collect::<Vec<_>>(),
+        );
 
         Paragraph::new(history)
             .centered()
-            .scroll((offset, 0))
             .block(block)
             .render(area, buf);
-    }
-}
-
-impl Display for History {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for instr in &self.inner {
-            writeln!(f, "{instr}")?;
-        }
-        Ok(())
     }
 }

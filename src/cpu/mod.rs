@@ -10,10 +10,10 @@ use ratatui::{
 use crate::{
     cpu::{
         history::History,
-        instruction::{Instruction, InstructionsError},
+        instruction::{Instruction, InstructionError},
         registers::{Registers, RegistersError, VRegister},
     },
-    keyboard::{Ch8Key, Ch8Keyboard, KeyboardError},
+    keyboard::{Ch8Key, Ch8Keyboard, KeyError, KeyboardError},
     memory::{self, Address, Memory, MemoryError},
     screen::StandardScreen,
 };
@@ -85,7 +85,7 @@ impl Cpu {
     const DEFAULT_CLOCK_SPEED: f64 = 60.0;
     const FRAME_RATE: f64 = 60.0;
 
-    pub(crate) fn load_program(bytes: &[u8]) -> Result<Cpu, ExecutionError> {
+    pub(crate) fn load_program(bytes: &[u8]) -> Result<Cpu, MemoryError> {
         let mut cpu = Self::default();
         cpu.memory.store(bytes, START_ADDRESS)?;
         Ok(cpu)
@@ -96,28 +96,29 @@ impl Cpu {
         self
     }
 
-    pub(crate) fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<(), ExecutionError> {
+    pub(crate) fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<(), RunError> {
         while self.state != State::Terminated {
-            self.poll_event()?;
+            self.poll_event().map_err(RunError::EventPollFailed)?;
 
             if self.state == State::Running {
                 let pc = self.registers.program_counter;
 
                 let instr = self.next_instr()?;
-                self.execute(instr)?;
+                self.execute(instr)
+                    .map_err(|e| RunError::Execution(instr, e))?;
 
                 if self.registers.program_counter == pc {
                     self.terminate();
                 };
 
                 if Instant::now() > self.next_frame {
-                    self.keyboard.release_keys();
-                    self.next_frame += self.frame_interval;
                     self.decrease_delay_timer();
                     self.decrease_sound_timer();
                     terminal
                         .draw(|frame| self.draw(frame))
-                        .map_err(ExecutionError::Drawing)?;
+                        .map_err(RunError::RenderFailed)?;
+                    self.keyboard.release_keys();
+                    self.next_frame += self.frame_interval;
                 }
             }
 
@@ -162,11 +163,11 @@ impl Cpu {
         self.state = State::Terminated;
     }
 
-    fn poll_event(&mut self) -> Result<(), ExecutionError> {
-        if event::poll(self.frame_interval / 10).map_err(ExecutionError::Event)?
-            && let event::Event::Key(key_event) = event::read().map_err(ExecutionError::Event)?
-        {
-            self.handle_key_event(key_event);
+    fn poll_event(&mut self) -> Result<(), std::io::Error> {
+        while event::poll(Duration::from_secs(0))? {
+            if let event::Event::Key(key_event) = event::read()? {
+                self.handle_key_event(key_event);
+            }
         }
 
         Ok(())
@@ -184,7 +185,7 @@ impl Cpu {
             }
 
             Err(KeyboardError::KeyNotBound(key_code)) => match key_code {
-                KeyCode::Char('q') => self.terminate(),
+                KeyCode::Char('q') | KeyCode::Esc => self.terminate(),
                 KeyCode::Char('p') => match self.state {
                     State::Paused(PauseOrigin::UserPause) => self.resume(),
                     State::Running => self.pause(),
@@ -192,15 +193,16 @@ impl Cpu {
                 },
                 _ => {}
             },
-
-            Err(KeyboardError::InvalidKeyValue(_)) => panic!("should not happen"),
         }
     }
 
-    fn next_instr(&mut self) -> Result<Instruction, ExecutionError> {
-        let a = self.memory.read(self.registers.program_counter, 2)?;
+    fn next_instr(&mut self) -> Result<Instruction, RunError> {
+        let a = self
+            .memory
+            .read(self.registers.program_counter, 2)
+            .map_err(RunError::BadMemoryAccess)?;
         let a = <&[u8; 2]>::try_from(a).unwrap();
-        let instr: Instruction = a.try_into()?;
+        let instr = std::convert::TryInto::<Instruction>::try_into(a)?;
         self.registers.program_counter += 2;
         Ok(instr)
     }
@@ -402,6 +404,24 @@ impl Cpu {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub enum RunError {
+    #[error("could not execute {0}: {1}")]
+    Execution(Instruction, ExecutionError),
+
+    #[error("could not fetch instruction: {0}")]
+    BadInstruction(#[from] InstructionError),
+
+    #[error("could not fetch instruction: {0}")]
+    BadMemoryAccess(MemoryError),
+
+    #[error("could not poll event: {0}")]
+    EventPollFailed(std::io::Error),
+
+    #[error("render failed: {0}")]
+    RenderFailed(std::io::Error),
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum ExecutionError {
     #[error("register error: {0}")]
     Registers(#[from] RegistersError),
@@ -412,14 +432,8 @@ pub enum ExecutionError {
     #[error("keyboard error: {0}")]
     Keyboard(#[from] KeyboardError),
 
-    #[error("instruction error: {0}")]
-    Instruction(#[from] InstructionsError),
-
-    #[error("drawing error: {0}")]
-    Drawing(std::io::Error),
-
-    #[error("event error: {0}")]
-    Event(std::io::Error),
+    #[error(" {0}")]
+    BadKeyValue(#[from] KeyError),
 }
 
 #[cfg(test)]

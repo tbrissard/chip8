@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use crate::cpu::{Cpu, ExecutionError};
+use crate::{
+    cpu::{Cpu, RunError},
+    memory::MemoryError,
+};
 
 #[derive(Debug)]
 pub struct Interpreter {}
@@ -12,7 +15,8 @@ impl Interpreter {
             path: program,
         })?;
 
-        let mut cpu = Cpu::load_program(program.as_slice())?;
+        let mut cpu =
+            Cpu::load_program(program.as_slice()).map_err(InterpreterError::LoadingFailed)?;
         if let Some(clock_speed) = clock_speed {
             cpu = cpu.with_clock_speed(clock_speed);
         }
@@ -24,8 +28,11 @@ impl Interpreter {
 
 #[derive(Debug, thiserror::Error)]
 pub enum InterpreterError {
-    #[error("execution error: {0}")]
-    Execution(#[from] ExecutionError),
+    #[error("running error: {0}")]
+    Run(#[from] RunError),
+
+    #[error("could not load program: {0}")]
+    LoadingFailed(MemoryError),
 
     #[error("{error}: {path}")]
     Io {

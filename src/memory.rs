@@ -40,11 +40,11 @@ impl Memory {
     /// In memory, the first byte of each instruction should be located at an even addresses. If a program includes sprite data, it should be padded so any instructions following it will be properly situated in RAM.
     pub(crate) fn store(&mut self, bytes: &[u8], addr: Address) -> Result<()> {
         if Memory::is_reserved(addr) {
-            return Err(MemoryError::Write(WriteError::ReservedAddr(addr)));
+            return Err(MemoryError::ReservedAddr(AccessKind::Write, addr));
         }
 
         if addr as usize + bytes.len() - 1 > MEMORY_SIZE as usize {
-            return Err(MemoryError::Write(WriteError::OutOfBound(addr)));
+            return Err(MemoryError::OutOfBound(AccessKind::Write, addr));
         }
 
         for (b, a) in bytes.iter().zip(addr..) {
@@ -60,7 +60,7 @@ impl Memory {
         // }
 
         if addr + n - 1 > MEMORY_SIZE {
-            return Err(ReadError::OutOfBound(addr).into());
+            return Err(MemoryError::OutOfBound(AccessKind::Read, addr));
         }
 
         Ok(&self.data[addr as usize..(addr + n) as usize])
@@ -69,35 +69,21 @@ impl Memory {
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum MemoryError {
-    #[error("write error: {0}")]
-    Write(#[from] WriteError),
-    #[error("read error: {0}")]
-    Read(#[from] ReadError),
+    #[error("cannot {0:?}: address is out of bound ({1:<#05X})")]
+    OutOfBound(AccessKind, Address),
+    #[error("cannot {0:?}: address is reserved ({1:<#05X})")]
+    ReservedAddr(AccessKind, Address),
 }
 
-#[derive(Debug, PartialEq, Eq, thiserror::Error)]
-pub enum WriteError {
-    #[error("address is out of bound ({0:<#05X})")]
-    OutOfBound(Address),
-    #[error("address is reserved ({0:<#05X})")]
-    ReservedAddr(Address),
-}
-
-#[derive(Debug, PartialEq, Eq, thiserror::Error)]
-pub enum ReadError {
-    #[error("address is out of bound ({0:<#05X})")]
-    OutOfBound(Address),
-    #[error("address is reserved ({0:<#05X})")]
-    ReservedAddr(Address),
+#[derive(Debug, PartialEq, Eq)]
+pub enum AccessKind {
+    Write,
+    Read,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Address;
-    use super::MEMORY_SIZE;
-    use super::Memory;
-    use super::MemoryError;
-    use super::WriteError;
+    use super::*;
 
     const TEST_DATA: [u8; 3] = [1, 2, 3];
     const TEST_ADDR: Address = 0x200;
@@ -122,7 +108,7 @@ mod tests {
         let res = mem.store(&[1u8], MEMORY_SIZE + 1);
         assert_eq!(
             res,
-            Err(MemoryError::Write(WriteError::OutOfBound(MEMORY_SIZE + 1)))
+            Err(MemoryError::OutOfBound(AccessKind::Write, MEMORY_SIZE + 1))
         );
     }
 
@@ -133,13 +119,13 @@ mod tests {
         let res = mem.store(&[1u8], 0x000);
         assert_eq!(
             res,
-            Err(MemoryError::Write(WriteError::ReservedAddr(0x000)))
+            Err(MemoryError::ReservedAddr(AccessKind::Write, 0x000))
         );
 
         let res = mem.store(&[1u8], 0x1FF);
         assert_eq!(
             res,
-            Err(MemoryError::Write(WriteError::ReservedAddr(0x1FF)))
+            Err(MemoryError::ReservedAddr(AccessKind::Write, 0x1FF))
         );
     }
 

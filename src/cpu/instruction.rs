@@ -4,7 +4,7 @@ type Value = u8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
-pub(super) enum Instruction {
+pub enum Instruction {
     /// Clear the display.
     CLS,
 
@@ -191,7 +191,7 @@ fn from_low_12(a: u8, b: u8, c: u8) -> u16 {
 }
 
 impl TryFrom<&[u8; 2]> for Instruction {
-    type Error = InstructionsError;
+    type Error = InstructionError;
 
     fn try_from(value: &[u8; 2]) -> Result<Self, Self::Error> {
         Ok(match split_nibbles(*value) {
@@ -229,13 +229,13 @@ impl TryFrom<&[u8; 2]> for Instruction {
             (0xF, b, 0x3, 0x3) => Self::LD_B(b),
             (0xF, b, 0x5, 0x5) => Self::LD_MEM_I(b),
             (0xF, b, 0x6, 0x5) => Self::LD_I_MEM(b),
-            _ => return Err(InstructionsError::InvalidInstruction(*value)),
+            _ => return Err(InstructionError::InvalidInstruction(*value)),
         })
     }
 }
 
 impl TryFrom<u16> for Instruction {
-    type Error = InstructionsError;
+    type Error = InstructionError;
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         Self::try_from(&u16::to_be_bytes(value))
@@ -297,21 +297,21 @@ impl std::fmt::Display for Instruction {
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
-pub enum InstructionsError {
+pub enum InstructionError {
     #[error("{:#06X} is not a valid instruction", u16::from_be_bytes(*.0))]
     InvalidInstruction([u8; 2]),
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Instruction, InstructionsError};
+    use super::{Instruction, InstructionError};
 
     #[test]
     fn test_non_existent_instruction() {
         let instr = Instruction::try_from(0x0000);
         assert_eq!(
             instr,
-            Err(InstructionsError::InvalidInstruction([0x00, 0x00]))
+            Err(InstructionError::InvalidInstruction([0x00, 0x00]))
         );
     }
 
