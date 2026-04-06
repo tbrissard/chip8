@@ -21,7 +21,7 @@ pub(crate) enum Ch8Key {
 }
 
 impl Ch8Key {
-    pub(super) const VARIANTS: [Self; 16] = [
+    pub(crate) const VARIANTS: [Self; 16] = [
         Self::Zero,
         Self::One,
         Self::Two,

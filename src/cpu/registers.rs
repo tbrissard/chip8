@@ -1,12 +1,3 @@
-use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Layout, Rect},
-    style::Stylize,
-    symbols::border,
-    text::{Line, Text},
-    widgets::{Block, Widget},
-};
-
 use crate::memory::Address;
 
 /// General purpose register
@@ -21,24 +12,24 @@ const MAX_SUBROUTINES: u8 = 16;
 pub(crate) struct Registers {
     /// Chip-8 has 16 general purpose 8-bit registers, usually referred to as Vx, where x is a hexadecimal digit (0 through F).
     /// The VF register should not be used by any program, as it is used as a flag by some instructions.
-    pub(super) v_registers: [VRegister; 16],
+    pub(crate) v_registers: [VRegister; 16],
 
     /// This register is generally used to store memory addresses, so only the lowest (rightmost) 12 bits are usually used.
-    pub(super) i: Address,
+    pub(crate) i: Address,
 
     /// Chip-8 also has two special purpose 8-bit registers, for the delay and sound timers. When these registers are non-zero, they are automatically decremented at a rate of 60Hz.
-    pub(super) delay_timer: TimerValue,
-    pub(super) sound_timer: TimerValue,
+    pub(crate) delay_timer: TimerValue,
+    pub(crate) sound_timer: TimerValue,
 
     // Not accessible by programs
     /// used to store the currently executing address
     pub(crate) program_counter: Address,
 
     /// The stack pointer (SP) can be 8-bit, it is used to point to the topmost level of the stack.
-    pub(super) stack_pointer: u8,
+    pub(crate) stack_pointer: u8,
 
     /// The stack is an array of 16 16-bit values, used to store the address that the interpreter shoud return to when finished with a subroutine. Chip-8 allows for up to 16 levels of nested subroutines.
-    pub(super) stack: [Address; MAX_SUBROUTINES as usize],
+    pub(crate) stack: [Address; MAX_SUBROUTINES as usize],
 }
 
 impl Registers {
@@ -65,53 +56,6 @@ impl Registers {
 
     pub(super) fn _top_stack(&self) -> Option<Address> {
         (self.stack_pointer > 0).then_some(self.stack[self.stack_pointer as usize - 1])
-    }
-}
-
-impl Widget for &Registers {
-    fn render(self, area: Rect, buf: &mut Buffer)
-    where
-        Self: Sized,
-    {
-        let title = Line::from("Registers".bold());
-        let block = Block::bordered()
-            .title(title.centered())
-            .border_set(border::THICK);
-        let block_area = block.inner(area);
-
-        let layout = Layout::horizontal(vec![Constraint::Length(8), Constraint::Length(22)])
-            .spacing(3)
-            .split(block_area);
-
-        let v_registers = Text::from(
-            self.v_registers
-                .iter()
-                .enumerate()
-                .map(|(i, vreg)| Line::from(format!("V{i:2}: {vreg:3}")))
-                .collect::<Vec<_>>(),
-        )
-        .centered();
-
-        let mut others = vec![
-            Line::from(format!("Program Counter: {:#05X}", self.program_counter)),
-            Line::from(format!("I: {:#05X}", self.i)),
-            Line::from(""),
-            Line::from(format!("Delay Timer: {}", self.delay_timer)),
-            Line::from(format!("Sound Timer: {}", self.sound_timer)),
-            Line::from(""),
-            Line::from(format!("Stack Pointer: {}", self.stack_pointer)),
-        ];
-        others.extend(
-            self.stack
-                .iter()
-                .map(|addr| format!("{addr:#X}"))
-                .map(Line::from),
-        );
-        let others = Text::from(others);
-
-        v_registers.render(layout[0], buf);
-        others.render(layout[1], buf);
-        block.render(area, buf);
     }
 }
 

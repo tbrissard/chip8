@@ -1,13 +1,5 @@
 use std::time::{Duration, Instant};
 
-use ratatui::{
-    layout::{Constraint, Layout},
-    style::{Modifier, Style, Stylize},
-    symbols::border,
-    text::{Line, Span},
-    widgets::{Block, Widget},
-};
-
 pub(crate) use crate::keyboard::ch8key::{Ch8Key, KeyError};
 
 mod ch8key;
@@ -64,38 +56,6 @@ impl Ch8Keyboard {
                 self.release_key(k);
             }
         }
-    }
-}
-
-impl Widget for &Ch8Keyboard {
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
-    where
-        Self: Sized,
-    {
-        let title = Line::from("Keyboard").bold().centered();
-        let block = Block::bordered().title(title).border_set(border::THICK);
-        let block_area = block.inner(area);
-
-        let layout = Layout::horizontal(vec![Constraint::Length(3); 16])
-            .spacing(3)
-            .split(block_area);
-
-        let regular = Style::default();
-        let pressed = regular.add_modifier(Modifier::BOLD | Modifier::REVERSED);
-
-        for (i, k) in Ch8Key::VARIANTS.into_iter().enumerate() {
-            Span::styled(
-                k.to_string(),
-                if self[k] == KeyState::Up {
-                    regular
-                } else {
-                    pressed
-                },
-            )
-            .render(layout[i], buf);
-        }
-
-        block.render(area, buf);
     }
 }
 

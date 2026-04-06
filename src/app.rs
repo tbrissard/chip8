@@ -11,7 +11,7 @@ use crate::{
         Registers, VRegister,
     },
     input,
-    keyboard::Ch8Key,
+    keyboard::{Ch8Key, Ch8Keyboard},
     screen::StandardScreen,
     tui,
 };
@@ -187,6 +187,10 @@ impl App {
 
     pub(crate) fn screen(&self) -> &StandardScreen {
         &self.cpu.screen
+    }
+
+    pub(crate) fn keyboard(&self) -> &Ch8Keyboard {
+        &self.cpu.keyboard
     }
 }
 

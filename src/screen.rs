@@ -4,14 +4,6 @@ use std::{
 };
 
 use num_traits::{Num, WrappingShl, WrappingShr};
-use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    style::Stylize,
-    symbols::border,
-    text::{Line, ToText},
-    widgets::{Block, Paragraph, Widget},
-};
 
 pub(crate) const DIGITS: [[u8; 5]; 16] = [
     [0xF0, 0x90, 0x90, 0x90, 0xF0],
@@ -153,26 +145,6 @@ where
         }
 
         Ok(())
-    }
-}
-
-impl Widget for &StandardScreen {
-    fn render(self, area: Rect, buf: &mut Buffer)
-    where
-        Self: Sized,
-    {
-        let title = Line::from("Display".bold());
-
-        let block = Block::bordered()
-            .title(title.centered())
-            .border_set(border::THICK);
-
-        let pixels = self.to_text();
-
-        Paragraph::new(pixels)
-            .centered()
-            .block(block)
-            .render(area, buf);
     }
 }
 
