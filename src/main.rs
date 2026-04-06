@@ -2,6 +2,16 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
+use crate::app::App;
+
+mod app;
+mod cpu;
+mod input;
+mod keyboard;
+mod memory;
+mod screen;
+mod tui;
+
 #[derive(Debug, Parser)]
 struct Args {
     #[command(subcommand)]
@@ -15,7 +25,7 @@ enum Command {
 
         /// Number of instructions per second
         #[arg(long)]
-        clock_speed: Option<u64>,
+        clock_speed: Option<f64>,
     },
 }
 
@@ -27,7 +37,15 @@ fn main() {
             program,
             clock_speed,
         } => {
-            if let Err(e) = chip8::Interpreter::run(program, clock_speed) {
+            let mut app = App::default();
+            let program = std::fs::read(program).unwrap();
+            if let Err(e) = {
+                if let Some(frequency) = clock_speed {
+                    app.set_clock_speed(frequency);
+                }
+                app.load_program(&program);
+                ratatui::run(|terminal| app.run(terminal))
+            } {
                 println!("{e}");
             }
         }

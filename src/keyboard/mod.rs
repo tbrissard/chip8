@@ -1,7 +1,6 @@
 use std::time::{Duration, Instant};
 
 use ratatui::{
-    crossterm::event::{KeyCode, KeyEventKind},
     layout::{Constraint, Layout},
     style::{Modifier, Style, Stylize},
     symbols::border,
@@ -46,24 +45,25 @@ impl Ch8Keyboard {
         self[k] == KeyState::Up
     }
 
-    pub(super) fn handle_ch8_key_event(&mut self, key: Ch8Key, kind: KeyEventKind) {
-        self[key] = match kind {
-            KeyEventKind::Press | KeyEventKind::Repeat => KeyState::Down(Instant::now()),
-            KeyEventKind::Release => KeyState::Up,
-        };
+    pub(crate) fn press_key(&mut self, key: Ch8Key) {
+        self[key] = KeyState::Down(Instant::now())
+    }
+
+    pub(crate) fn release_key(&mut self, key: Ch8Key) {
+        self[key] = KeyState::Up
     }
 
     /// Simulate the release of keys that have been pressed
     pub(super) fn release_keys(&mut self) {
         const PRESS_DURATION: Duration = Duration::from_millis(200);
 
-        self.states.iter_mut().for_each(|v| {
-            if let KeyState::Down(instant) = v
+        for k in Ch8Key::VARIANTS {
+            if let KeyState::Down(instant) = self[k]
                 && instant.elapsed() > PRESS_DURATION
             {
-                *v = KeyState::Up
+                self.release_key(k);
             }
-        });
+        }
     }
 }
 
@@ -111,36 +111,4 @@ impl std::ops::IndexMut<Ch8Key> for Ch8Keyboard {
     fn index_mut(&mut self, index: Ch8Key) -> &mut Self::Output {
         &mut self.states[index as usize]
     }
-}
-
-impl TryFrom<KeyCode> for Ch8Key {
-    type Error = KeyboardError;
-
-    fn try_from(value: KeyCode) -> Result<Self, KeyboardError> {
-        Ok(match value {
-            KeyCode::Char('0') => Ch8Key::Zero,
-            KeyCode::Char('1') => Ch8Key::One,
-            KeyCode::Char('2') => Ch8Key::Two,
-            KeyCode::Char('3') => Ch8Key::Three,
-            KeyCode::Char('4') => Ch8Key::Four,
-            KeyCode::Char('5') => Ch8Key::Five,
-            KeyCode::Char('6') => Ch8Key::Six,
-            KeyCode::Char('7') => Ch8Key::Seven,
-            KeyCode::Char('8') => Ch8Key::Eight,
-            KeyCode::Char('9') => Ch8Key::Nine,
-            KeyCode::Char('a') => Ch8Key::A,
-            KeyCode::Char('b') => Ch8Key::B,
-            KeyCode::Char('c') => Ch8Key::C,
-            KeyCode::Char('d') => Ch8Key::D,
-            KeyCode::Char('e') => Ch8Key::E,
-            KeyCode::Char('f') => Ch8Key::F,
-            _ => return Err(KeyboardError::KeyNotBound(value)),
-        })
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum KeyboardError {
-    #[error("{0} is not bound to the virtual keyboard")]
-    KeyNotBound(KeyCode),
 }

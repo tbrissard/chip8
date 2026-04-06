@@ -10,7 +10,7 @@ use ratatui::{
 use crate::memory::Address;
 
 /// General purpose register
-pub(super) type VRegister = u8;
+pub(crate) type VRegister = u8;
 pub(super) type TimerValue = u8;
 
 type Result<T> = std::result::Result<T, RegistersError>;
@@ -18,7 +18,7 @@ type Result<T> = std::result::Result<T, RegistersError>;
 const MAX_SUBROUTINES: u8 = 16;
 
 #[derive(Debug, Default)]
-pub(super) struct Registers {
+pub(crate) struct Registers {
     /// Chip-8 has 16 general purpose 8-bit registers, usually referred to as Vx, where x is a hexadecimal digit (0 through F).
     /// The VF register should not be used by any program, as it is used as a flag by some instructions.
     pub(super) v_registers: [VRegister; 16],
@@ -32,7 +32,7 @@ pub(super) struct Registers {
 
     // Not accessible by programs
     /// used to store the currently executing address
-    pub(super) program_counter: Address,
+    pub(crate) program_counter: Address,
 
     /// The stack pointer (SP) can be 8-bit, it is used to point to the topmost level of the stack.
     pub(super) stack_pointer: u8,

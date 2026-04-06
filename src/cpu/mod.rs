@@ -1,56 +1,33 @@
-use std::time::{Duration, Instant};
-
 use rand::{RngExt, rngs::ThreadRng};
-use ratatui::{
-    DefaultTerminal, Frame,
-    crossterm::event::{self, KeyCode, KeyEvent},
-    layout::{Constraint, Layout},
-};
 
+pub(crate) use crate::cpu::instruction::{Instruction, InstructionError};
+pub(crate) use crate::cpu::registers::Registers;
+pub(crate) use crate::cpu::registers::VRegister;
+pub(crate) use crate::memory::MemoryError;
 use crate::{
-    cpu::{
-        history::History,
-        instruction::{Instruction, InstructionError},
-        registers::{Registers, RegistersError, VRegister},
-    },
-    keyboard::{Ch8Key, Ch8Keyboard, KeyError, KeyboardError},
-    memory::{self, Address, Memory, MemoryError},
+    cpu::registers::RegistersError,
+    keyboard::{Ch8Keyboard, KeyError},
+    memory::{self, Address, Memory},
     screen::StandardScreen,
 };
 
-mod history;
 mod instruction;
 mod registers;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum State {
-    Running,
-    Paused(PauseOrigin),
-    Terminated,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PauseOrigin {
-    UserPause,
-    LoadKeyInstruction(VRegister),
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum ExecutionResult {
+    Continue,
+    WaitForKey(VRegister),
 }
 
 #[derive(Debug)]
 pub struct Cpu {
-    registers: Registers,
-    keyboard: Ch8Keyboard,
+    pub(crate) registers: Registers,
+    pub(crate) keyboard: Ch8Keyboard,
     memory: Memory,
     pub(crate) screen: StandardScreen,
 
-    history: History,
-
-    tick_interval: Duration,
-    next_tick: Instant,
-    frame_interval: Duration,
-    next_frame: Instant,
-
     rng: ThreadRng,
-    state: State,
 }
 
 const START_ADDRESS: Address = 0x200;
@@ -68,146 +45,30 @@ impl Default for Cpu {
             memory: Memory::default(),
             screen: StandardScreen::new(),
 
-            history: History::new(),
-
-            tick_interval: Duration::from_secs_f64(1.0 / Self::DEFAULT_CLOCK_SPEED),
-            next_tick: Instant::now(),
-            frame_interval: Duration::from_secs_f64(1.0 / Self::FRAME_RATE),
-            next_frame: Instant::now(),
-
             rng: ThreadRng::default(),
-            state: State::Running,
         }
     }
 }
 
 impl Cpu {
-    const DEFAULT_CLOCK_SPEED: f64 = 60.0;
-    const FRAME_RATE: f64 = 60.0;
-
-    pub(crate) fn load_program(bytes: &[u8]) -> Result<Cpu, MemoryError> {
+    pub(crate) fn load_program(bytes: &[u8]) -> Result<Self, MemoryError> {
         let mut cpu = Self::default();
         cpu.memory.store(bytes, START_ADDRESS)?;
         Ok(cpu)
     }
 
-    pub(crate) fn with_clock_speed(mut self, frequency: u64) -> Self {
-        self.tick_interval = Duration::from_millis(1000 / frequency);
-        self
-    }
-
-    pub(crate) fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<(), RunError> {
-        while self.state != State::Terminated {
-            self.poll_event().map_err(RunError::EventPollFailed)?;
-
-            if self.state == State::Running {
-                let pc = self.registers.program_counter;
-
-                let instr = self.next_instr()?;
-                self.execute(instr)
-                    .map_err(|e| RunError::Execution(instr, e))?;
-
-                if self.registers.program_counter == pc {
-                    self.terminate();
-                };
-
-                if Instant::now() > self.next_frame {
-                    self.decrease_delay_timer();
-                    self.decrease_sound_timer();
-                    terminal
-                        .draw(|frame| self.draw(frame))
-                        .map_err(RunError::RenderFailed)?;
-                    self.keyboard.release_keys();
-                    self.next_frame += self.frame_interval;
-                }
-            }
-
-            std::thread::sleep(self.next_tick.saturating_duration_since(Instant::now()));
-            self.next_tick += self.tick_interval;
-        }
-
-        Ok(())
-    }
-
-    fn draw(&self, frame: &mut Frame) {
-        let layout = Layout::horizontal(vec![
-            Constraint::Length(StandardScreen::WIDTH as u16 + 2),
-            Constraint::Length(17),
-            Constraint::Length(35),
-        ])
-        .split(frame.area());
-
-        let inner_layout = Layout::vertical(vec![
-            Constraint::Length(StandardScreen::HEIGHT as u16 + 2),
-            Constraint::Length(5),
-        ])
-        .split(layout[0]);
-
-        frame.render_widget(&self.screen, inner_layout[0]);
-        frame.render_widget(&self.keyboard, inner_layout[1]);
-        frame.render_widget(&self.history, layout[1]);
-        frame.render_widget(&self.registers, layout[2]);
-    }
-
-    fn pause(&mut self) {
-        self.state = State::Paused(PauseOrigin::UserPause);
-    }
-
-    fn resume(&mut self) {
-        self.state = State::Running;
-        self.next_tick = Instant::now() + self.tick_interval;
-        self.next_frame = Instant::now() + self.frame_interval;
-    }
-
-    fn terminate(&mut self) {
-        self.state = State::Terminated;
-    }
-
-    fn poll_event(&mut self) -> Result<(), std::io::Error> {
-        while event::poll(Duration::from_secs(0))? {
-            if let event::Event::Key(key_event) = event::read()? {
-                self.handle_key_event(key_event);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn handle_key_event(&mut self, event: KeyEvent) {
-        match Ch8Key::try_from(event.code) {
-            Ok(ch8_key) => {
-                if let State::Paused(PauseOrigin::LoadKeyInstruction(vx)) = self.state {
-                    self.set_v_reg(vx, ch8_key.into());
-                    self.resume();
-                } else {
-                    self.keyboard.handle_ch8_key_event(ch8_key, event.kind)
-                }
-            }
-
-            Err(KeyboardError::KeyNotBound(key_code)) => match key_code {
-                KeyCode::Char('q') | KeyCode::Esc => self.terminate(),
-                KeyCode::Char('p') => match self.state {
-                    State::Paused(PauseOrigin::UserPause) => self.resume(),
-                    State::Running => self.pause(),
-                    _ => {}
-                },
-                _ => {}
-            },
-        }
-    }
-
-    fn next_instr(&mut self) -> Result<Instruction, RunError> {
-        let a = self
-            .memory
-            .read(self.registers.program_counter, 2)
-            .map_err(RunError::BadMemoryAccess)?;
+    pub(crate) fn next_instr(&mut self) -> Result<Instruction, InstructionFetchError> {
+        let a = self.memory.read(self.registers.program_counter, 2)?;
         let a = <&[u8; 2]>::try_from(a).unwrap();
         let instr = std::convert::TryInto::<Instruction>::try_into(a)?;
         self.registers.program_counter += 2;
         Ok(instr)
     }
 
-    fn execute(&mut self, instr: Instruction) -> Result<(), ExecutionError> {
+    pub(crate) fn execute(
+        &mut self,
+        instr: Instruction,
+    ) -> Result<ExecutionResult, ExecutionError> {
         match instr {
             Instruction::CLS => self.screen.clear(),
 
@@ -324,9 +185,7 @@ impl Cpu {
 
             Instruction::LD_DT(vx) => self.set_v_reg(vx, self.registers.delay_timer),
 
-            Instruction::LD_K(vx) => {
-                self.state = State::Paused(PauseOrigin::LoadKeyInstruction(vx))
-            }
+            Instruction::LD_K(vx) => return Ok(ExecutionResult::WaitForKey(vx)),
 
             Instruction::SET_DT(vx) => self.registers.delay_timer = self.v_reg(vx),
 
@@ -369,9 +228,7 @@ impl Cpu {
             }
         }
 
-        self.history.push(instr);
-
-        Ok(())
+        Ok(ExecutionResult::Continue)
     }
 
     fn skip_instr(&mut self) {
@@ -382,7 +239,7 @@ impl Cpu {
         self.registers.v_registers[reg_index as usize]
     }
 
-    fn set_v_reg(&mut self, reg_index: VRegister, value: VRegister) {
+    pub(crate) fn set_v_reg(&mut self, reg_index: VRegister, value: VRegister) {
         self.registers.v_registers[reg_index as usize] = value;
     }
 
@@ -394,31 +251,22 @@ impl Cpu {
         self.set_v_reg(0xF, value);
     }
 
-    fn decrease_delay_timer(&mut self) {
+    pub(crate) fn decrease_delay_timer(&mut self) {
         self.registers.delay_timer = self.registers.delay_timer.saturating_sub(1);
     }
 
-    fn decrease_sound_timer(&mut self) {
+    pub(crate) fn decrease_sound_timer(&mut self) {
         self.registers.sound_timer = self.registers.sound_timer.saturating_sub(1);
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum RunError {
-    #[error("could not execute {0}: {1}")]
-    Execution(Instruction, ExecutionError),
-
-    #[error("could not fetch instruction: {0}")]
+pub enum InstructionFetchError {
+    #[error("{0}")]
     BadInstruction(#[from] InstructionError),
 
-    #[error("could not fetch instruction: {0}")]
-    BadMemoryAccess(MemoryError),
-
-    #[error("could not poll event: {0}")]
-    EventPollFailed(std::io::Error),
-
-    #[error("render failed: {0}")]
-    RenderFailed(std::io::Error),
+    #[error("{0}")]
+    BadMemoryAccess(#[from] MemoryError),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -428,9 +276,6 @@ pub enum ExecutionError {
 
     #[error("memory error: {0}")]
     Memory(#[from] MemoryError),
-
-    #[error("keyboard error: {0}")]
-    Keyboard(#[from] KeyboardError),
 
     #[error(" {0}")]
     BadKeyValue(#[from] KeyError),
