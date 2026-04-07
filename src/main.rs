@@ -39,15 +39,11 @@ fn main() {
         } => {
             let mut app = App::default();
             let program = std::fs::read(program).unwrap();
-            if let Err(e) = {
-                if let Some(frequency) = clock_speed {
-                    app.set_clock_speed(frequency);
-                }
-                app.load_program(&program);
-                ratatui::run(|terminal| app.run(terminal))
-            } {
-                println!("{e}");
+            if let Some(frequency) = clock_speed {
+                app.set_clock_speed(frequency);
             }
+            app.load_program(&program).unwrap();
+            ratatui::run(|terminal| app.run(terminal)).unwrap();
         }
     }
 }

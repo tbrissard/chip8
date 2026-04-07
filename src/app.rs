@@ -148,6 +148,7 @@ impl App {
                     .cpu
                     .execute(instr)
                     .map_err(|e| RunError::Execution(instr, e))?;
+                self.history.push(instr);
                 match res {
                     ExecutionResult::Continue => {}
                     ExecutionResult::WaitForKey(vx) => {
