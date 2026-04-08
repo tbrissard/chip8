@@ -2,7 +2,7 @@
 
 A simple chip8 emulator/interpreter written in Rust.
 
-![gif](https://i.imgur.com/pcln2f5.mp4)
+![gif](http://i.imgur.com/pcln2f5.gif)
 
 ## Compilation
 
@@ -34,5 +34,6 @@ You can find chip8 ROMs [here](https://github.com/dmatlack/chip8/tree/master/rom
 - display available shortcuts
 - look into mpsc channels and async/event-driven
 - check test coverage and add tests where missing
+- add a "step" keybind
 - add support for some chip8 extension (superchip, megachip, etc)
 - add keyboard mapping
