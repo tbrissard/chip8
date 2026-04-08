@@ -2,7 +2,7 @@
 
 A simple chip8 emulator/interpreter written in Rust.
 
-![gif](http://i.imgur.com/pcln2f5.gif)
+![http://i.imgur.com/pcln2f5.gif](http://i.imgur.com/pcln2f5.gif)
 
 ## Compilation
 
