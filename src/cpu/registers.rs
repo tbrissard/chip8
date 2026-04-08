@@ -1,18 +1,86 @@
+use std::{
+    fmt::Display,
+    ops::{Index, IndexMut},
+};
+
 use crate::memory::Address;
 
 /// General purpose register
-pub(crate) type VRegister = u8;
+pub(crate) type VRegisterValue = u8;
 pub(super) type TimerValue = u8;
 
-type Result<T> = std::result::Result<T, RegistersError>;
-
 const MAX_SUBROUTINES: u8 = 16;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) enum VRegister {
+    V0,
+    V1,
+    V2,
+    V3,
+    V4,
+    V5,
+    V6,
+    V7,
+    V8,
+    V9,
+    VA,
+    VB,
+    VC,
+    VD,
+    VE,
+    VF,
+}
+
+impl Display for VRegister {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl Index<VRegister> for Registers {
+    type Output = VRegisterValue;
+    fn index(&self, index: VRegister) -> &Self::Output {
+        &self.v_registers[index as usize]
+    }
+}
+
+impl IndexMut<VRegister> for Registers {
+    fn index_mut(&mut self, index: VRegister) -> &mut Self::Output {
+        &mut self.v_registers[index as usize]
+    }
+}
+
+impl TryFrom<u8> for VRegister {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Ok(match value {
+            0x0 => Self::V0,
+            0x1 => Self::V1,
+            0x2 => Self::V2,
+            0x3 => Self::V3,
+            0x4 => Self::V4,
+            0x5 => Self::V5,
+            0x6 => Self::V6,
+            0x7 => Self::V7,
+            0x8 => Self::V8,
+            0x9 => Self::V9,
+            0xA => Self::VA,
+            0xB => Self::VB,
+            0xC => Self::VC,
+            0xD => Self::VD,
+            0xE => Self::VE,
+            0xF => Self::VF,
+            _ => return Err(()),
+        })
+    }
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct Registers {
     /// Chip-8 has 16 general purpose 8-bit registers, usually referred to as Vx, where x is a hexadecimal digit (0 through F).
     /// The VF register should not be used by any program, as it is used as a flag by some instructions.
-    pub(crate) v_registers: [VRegister; 16],
+    pub(crate) v_registers: [VRegisterValue; 16],
 
     /// This register is generally used to store memory addresses, so only the lowest (rightmost) 12 bits are usually used.
     pub(crate) i: Address,
@@ -33,7 +101,7 @@ pub(crate) struct Registers {
 }
 
 impl Registers {
-    pub(super) fn push_stack(&mut self, addr: Address) -> Result<()> {
+    pub(super) fn push_stack(&mut self, addr: Address) -> Result<(), RegistersError> {
         if self.stack_pointer == MAX_SUBROUTINES {
             return Err(RegistersError::StackFull);
         }
@@ -44,7 +112,7 @@ impl Registers {
         Ok(())
     }
 
-    pub(super) fn pop_stack(&mut self) -> Result<Address> {
+    pub(super) fn pop_stack(&mut self) -> Result<Address, RegistersError> {
         if self.stack_pointer == 0 {
             return Err(RegistersError::StackEmpty);
         }
@@ -52,6 +120,14 @@ impl Registers {
         self.stack_pointer -= 1;
         let addr = self.stack[self.stack_pointer as usize];
         Ok(addr)
+    }
+
+    pub(crate) fn set_vreg(&mut self, vreg: VRegister, value: VRegisterValue) {
+        self[vreg] = value;
+    }
+
+    pub(crate) fn vreg(&self, vreg: VRegister) -> VRegisterValue {
+        self[vreg]
     }
 
     pub(super) fn _top_stack(&self) -> Option<Address> {
