@@ -2,7 +2,11 @@
 
 A simple chip8 emulator/interpreter written in Rust.
 
+<<<<<<< HEAD
 ![http://i.imgur.com/pcln2f5.gif](http://i.imgur.com/pcln2f5.gif)
+=======
+[http://i.imgur.com/pcln2f5.gif](http://i.imgur.com/pcln2f5.gif)
+>>>>>>> cd8790a (do not try to render gif, simply display imgur link)
 
 ## Compilation
 
