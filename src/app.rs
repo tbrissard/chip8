@@ -115,7 +115,7 @@ impl App {
 
             Action::Chip8KeyPress(ch8_key) => {
                 if let State::Paused(PauseOrigin::LoadKeyInstruction(vx)) = self.state {
-                    self.cpu.set_v_reg(vx, Into::<u8>::into(*ch8_key));
+                    self.cpu.set_vreg(vx, Into::<u8>::into(*ch8_key));
                     self.resume();
                 } else {
                     self.cpu.keyboard.press_key(*ch8_key)
