@@ -30,7 +30,6 @@ You can find chip8 ROMs [here](https://github.com/dmatlack/chip8/tree/master/rom
 
 ## Todo
 
-- organize keyboard display in a 4x4 grid
 - display available shortcuts
 - look into mpsc channels and async/event-driven
 - check test coverage and add tests where missing
