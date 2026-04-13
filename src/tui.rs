@@ -5,8 +5,8 @@ use ratatui::{
     prelude::Widget,
     style::{Modifier, Style, Stylize},
     symbols::border,
-    text::{Line, Span, Text, ToLine, ToText},
-    widgets::{Block, Paragraph},
+    text::{Line, Text, ToLine, ToText},
+    widgets::{Block, Borders, Padding, Paragraph},
 };
 
 use crate::{
@@ -26,7 +26,7 @@ pub(crate) fn draw(app: &App, frame: &mut Frame) {
 
     let inner_layout = Layout::vertical(vec![
         Constraint::Length(StandardScreen::HEIGHT as u16 + 2),
-        Constraint::Length(5),
+        Constraint::Fill(1),
     ])
     .split(layout[0]);
 
@@ -62,23 +62,59 @@ fn render_keyboard(keyboard: &Ch8Keyboard, area: Rect, buf: &mut Buffer) {
     let block = Block::bordered().title(title).border_set(border::THICK);
     let block_area = block.inner(area);
 
-    let layout = Layout::horizontal(vec![Constraint::Length(3); 16])
-        .spacing(3)
+    const HORIZONTAL_SPACING: u16 = 3;
+    const VERTICAL_SPACING: u16 = 1;
+
+    let layout = Layout::horizontal(vec![Constraint::Percentage(25); 4])
+        .spacing(HORIZONTAL_SPACING)
         .split(block_area);
+    let inners = layout
+        .iter()
+        .flat_map(|l| {
+            Layout::vertical(vec![Constraint::Length(5); 4])
+                .spacing(VERTICAL_SPACING)
+                .split(*l)
+                .to_vec()
+        })
+        .collect::<Vec<_>>();
 
     let regular = Style::default();
     let pressed = regular.add_modifier(Modifier::BOLD | Modifier::REVERSED);
 
-    for (i, k) in Ch8Key::VARIANTS.into_iter().enumerate() {
-        Span::styled(
-            k.to_string(),
-            if keyboard[k] == KeyState::Up {
-                regular
-            } else {
-                pressed
-            },
-        )
-        .render(layout[i], buf);
+    for k in Ch8Key::VARIANTS.into_iter() {
+        let style = if let KeyState::Up = keyboard[k] {
+            regular
+        } else {
+            pressed
+        };
+
+        let cell = match k {
+            Ch8Key::Zero => inners[7],
+            Ch8Key::One => inners[2],
+            Ch8Key::Two => inners[6],
+            Ch8Key::Three => inners[10],
+            Ch8Key::Four => inners[1],
+            Ch8Key::Five => inners[5],
+            Ch8Key::Six => inners[9],
+            Ch8Key::Seven => inners[0],
+            Ch8Key::Eight => inners[4],
+            Ch8Key::Nine => inners[8],
+            Ch8Key::A => inners[3],
+            Ch8Key::B => inners[11],
+            Ch8Key::C => inners[12],
+            Ch8Key::D => inners[13],
+            Ch8Key::E => inners[14],
+            Ch8Key::F => inners[15],
+        };
+
+        let cell_block = Block::bordered().padding(Padding::vertical(1)).style(style);
+        let inner = cell_block.inner(cell);
+        cell_block.render(cell, buf);
+
+        Paragraph::new(k.to_string())
+            .style(Style::new().add_modifier(Modifier::BOLD))
+            .centered()
+            .render(inner, buf);
     }
 
     block.render(area, buf);
@@ -101,7 +137,8 @@ fn render_screen(screen: &StandardScreen, area: Rect, buf: &mut Buffer) {
 
 fn render_registers(registers: &Registers, area: Rect, buf: &mut Buffer) {
     let title = Line::from("Registers".bold());
-    let block = Block::bordered()
+    let block = Block::default()
+        .borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT)
         .title(title.centered())
         .border_set(border::THICK);
     let block_area = block.inner(area);

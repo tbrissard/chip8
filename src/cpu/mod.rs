@@ -353,7 +353,7 @@ mod tests {
         assert_eq!(int.registers.program_counter, pc + 2);
 
         let pc = int.registers.program_counter;
-        int.set_vreg(REG_2, 1);
+        int.set_vreg(REG_2, 2);
         int.execute(Instruction::SE_Reg(REG_1, REG_2)).unwrap();
         assert_ne!(int.registers.program_counter, pc + 2);
     }
