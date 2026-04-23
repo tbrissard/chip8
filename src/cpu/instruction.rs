@@ -255,47 +255,47 @@ impl std::fmt::Display for Instruction {
             Instruction::JP(addr) => write!(f, "{:<WIDTH$}", format!("JP {:#05X}", addr)),
             Instruction::CALL(addr) => write!(f, "{:<WIDTH$}", format!("CALL {:#05X}", addr)),
             Instruction::SE_Value(vx, kk) => {
-                write!(f, "{:<WIDTH$}", format!("SE V{}, {}", vx, kk))
+                write!(f, "{:<WIDTH$}", format!("SE {}, {}", vx, kk))
             }
             Instruction::SNE(vx, kk) => {
-                write!(f, "{:<WIDTH$}", format!("SNE V{}, {}", vx, kk))
+                write!(f, "{:<WIDTH$}", format!("SNE {}, {}", vx, kk))
             }
-            Instruction::SE_Reg(vx, vy) => write!(f, "{:<WIDTH$}", format!("SE V{}, V{}", vx, vy)),
-            Instruction::LD(vx, kk) => write!(f, "{:<WIDTH$}", format!("LD V{}, {}", vx, kk)),
-            Instruction::ADD(vx, kk) => write!(f, "{:<WIDTH$}", format!("ADD V{}, {}", vx, kk)),
+            Instruction::SE_Reg(vx, vy) => write!(f, "{:<WIDTH$}", format!("SE {}, {}", vx, vy)),
+            Instruction::LD(vx, kk) => write!(f, "{:<WIDTH$}", format!("LD {}, {}", vx, kk)),
+            Instruction::ADD(vx, kk) => write!(f, "{:<WIDTH$}", format!("ADD {}, {}", vx, kk)),
             Instruction::LD_Regs(vx, vy) => {
-                write!(f, "{:<WIDTH$}", format!("LD V{}, V{}", vx, vy))
+                write!(f, "{:<WIDTH$}", format!("LD {}, {}", vx, vy))
             }
-            Instruction::OR(vx, vy) => write!(f, "{:<WIDTH$}", format!("OR V{}, V{}", vx, vy)),
-            Instruction::AND(vx, vy) => write!(f, "{:<WIDTH$}", format!("AND V{}, V{}", vx, vy)),
-            Instruction::XOR(vx, vy) => write!(f, "{:<WIDTH$}", format!("XOR V{}, V{}", vx, vy)),
+            Instruction::OR(vx, vy) => write!(f, "{:<WIDTH$}", format!("OR {}, {}", vx, vy)),
+            Instruction::AND(vx, vy) => write!(f, "{:<WIDTH$}", format!("AND {}, {}", vx, vy)),
+            Instruction::XOR(vx, vy) => write!(f, "{:<WIDTH$}", format!("XOR {}, {}", vx, vy)),
             Instruction::ADD_Reg(vx, vy) => {
-                write!(f, "{:<WIDTH$}", format!("ADD V{}, V{}", vx, vy))
+                write!(f, "{:<WIDTH$}", format!("ADD {}, {}", vx, vy))
             }
-            Instruction::SUB(vx, vy) => write!(f, "{:<WIDTH$}", format!("SUB V{}, V{}", vx, vy)),
-            Instruction::SHR(vx) => write!(f, "{:<WIDTH$}", format!("SHR V{}", vx)),
-            Instruction::SUBN(vx, vy) => write!(f, "{:<WIDTH$}", format!("SUBN V{}, V{}", vx, vy)),
-            Instruction::SHL(vx) => write!(f, "{:<WIDTH$}", format!("SHL V{}", vx)),
+            Instruction::SUB(vx, vy) => write!(f, "{:<WIDTH$}", format!("SUB {}, {}", vx, vy)),
+            Instruction::SHR(vx) => write!(f, "{:<WIDTH$}", format!("SHR {}", vx)),
+            Instruction::SUBN(vx, vy) => write!(f, "{:<WIDTH$}", format!("SUBN {}, {}", vx, vy)),
+            Instruction::SHL(vx) => write!(f, "{:<WIDTH$}", format!("SHL {}", vx)),
             Instruction::SNE_Reg(vx, vy) => {
-                write!(f, "{:<WIDTH$}", format!("SNE V{}, V{}", vx, vy))
+                write!(f, "{:<WIDTH$}", format!("SNE {}, {}", vx, vy))
             }
             Instruction::LD_I(addr) => write!(f, "{:<WIDTH$}", format!("LD I, {:#05X}", addr)),
             Instruction::JP_V0(addr) => write!(f, "{:<WIDTH$}", format!("JP V0, {:#05X}", addr)),
-            Instruction::RND(vx, kk) => write!(f, "{:<WIDTH$}", format!("RND V{}, {}", vx, kk)),
+            Instruction::RND(vx, kk) => write!(f, "{:<WIDTH$}", format!("RND {}, {}", vx, kk)),
             Instruction::DRW(vx, vy, n) => {
-                write!(f, "{:<WIDTH$}", format!("DRW V{}, V{}, {}", vx, vy, n))
+                write!(f, "{:<WIDTH$}", format!("DRW {}, {}, {}", vx, vy, n))
             }
-            Instruction::SKP(vx) => write!(f, "{:<WIDTH$}", format!("SKP V{}", vx)),
-            Instruction::SKNP(vx) => write!(f, "{:<WIDTH$}", format!("SKNP V{}", vx)),
-            Instruction::LD_DT(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, DT", vx)),
-            Instruction::LD_K(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, KEY", vx)),
-            Instruction::SET_DT(vx) => write!(f, "{:<WIDTH$}", format!("LD DT, V{}", vx)),
-            Instruction::SET_ST(vx) => write!(f, "{:<WIDTH$}", format!("LD ST, V{}", vx)),
-            Instruction::ADD_I(vx) => write!(f, "{:<WIDTH$}", format!("ADD I, V{}", vx)),
-            Instruction::LD_F(vx) => write!(f, "{:<WIDTH$}", format!("LD F, V{}", vx)),
-            Instruction::LD_B(vx) => write!(f, "{:<WIDTH$}", format!("LD B, V{}", vx)),
-            Instruction::LD_MEM_I(vx) => write!(f, "{:<WIDTH$}", format!("LD [I], V{}", vx)),
-            Instruction::LD_I_MEM(vx) => write!(f, "{:<WIDTH$}", format!("LD V{}, [I]", vx)),
+            Instruction::SKP(vx) => write!(f, "{:<WIDTH$}", format!("SKP {}", vx)),
+            Instruction::SKNP(vx) => write!(f, "{:<WIDTH$}", format!("SKNP {}", vx)),
+            Instruction::LD_DT(vx) => write!(f, "{:<WIDTH$}", format!("LD {}, DT", vx)),
+            Instruction::LD_K(vx) => write!(f, "{:<WIDTH$}", format!("LD {}, KEY", vx)),
+            Instruction::SET_DT(vx) => write!(f, "{:<WIDTH$}", format!("LD DT, {}", vx)),
+            Instruction::SET_ST(vx) => write!(f, "{:<WIDTH$}", format!("LD ST, {}", vx)),
+            Instruction::ADD_I(vx) => write!(f, "{:<WIDTH$}", format!("ADD I, {}", vx)),
+            Instruction::LD_F(vx) => write!(f, "{:<WIDTH$}", format!("LD F, {}", vx)),
+            Instruction::LD_B(vx) => write!(f, "{:<WIDTH$}", format!("LD B, {}", vx)),
+            Instruction::LD_MEM_I(vx) => write!(f, "{:<WIDTH$}", format!("LD [I], {}", vx)),
+            Instruction::LD_I_MEM(vx) => write!(f, "{:<WIDTH$}", format!("LD {}, [I]", vx)),
         }
     }
 }
