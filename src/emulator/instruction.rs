@@ -1,5 +1,5 @@
 use crate::{
-    cpu::registers::{VRegister, VRegisterValue},
+    emulator::registers::{VRegister, VRegisterValue},
     memory::Address,
 };
 

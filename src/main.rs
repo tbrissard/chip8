@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 use crate::app::App;
 
 mod app;
-mod cpu;
+mod emulator;
 mod input;
 mod keyboard;
 mod memory;

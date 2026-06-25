@@ -37,7 +37,7 @@ impl Ch8Keyboard {
         self[k] == KeyState::Up
     }
 
-    pub(crate) fn press_key(&mut self, key: Ch8Key) {
+    pub(super) fn press_key(&mut self, key: Ch8Key) {
         self[key] = KeyState::Down(Instant::now())
     }
 

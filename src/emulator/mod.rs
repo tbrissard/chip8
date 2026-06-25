@@ -1,12 +1,13 @@
 use rand::{RngExt, rngs::ThreadRng};
 
-pub(crate) use crate::cpu::instruction::{Instruction, InstructionError};
-pub(crate) use crate::cpu::registers::Registers;
-pub(crate) use crate::cpu::registers::VRegister;
-pub(crate) use crate::cpu::registers::VRegisterValue;
+pub(crate) use crate::emulator::instruction::{Instruction, InstructionError};
+pub(crate) use crate::emulator::registers::Registers;
+pub(crate) use crate::emulator::registers::VRegister;
+pub(crate) use crate::emulator::registers::VRegisterValue;
+use crate::keyboard::Ch8Key;
 pub(crate) use crate::memory::MemoryError;
 use crate::{
-    cpu::registers::RegistersError,
+    emulator::registers::RegistersError,
     keyboard::{Ch8Keyboard, KeyError},
     memory::{self, Address, Memory},
     screen::StandardScreen,
@@ -15,25 +16,29 @@ use crate::{
 mod instruction;
 mod registers;
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum ExecutionResult {
-    Continue,
-    WaitForKey(VRegister),
+#[derive(Debug, Default, Clone, Copy)]
+enum Execution {
+    #[default]
+    Running,
+    /// the emulator is waiting for a key to be pressed (see instruction LD_K)
+    WaitingForKey(VRegister),
 }
 
 #[derive(Debug)]
-pub struct Cpu {
+pub struct Emulator {
     pub(crate) registers: Registers,
     pub(crate) keyboard: Ch8Keyboard,
     memory: Memory,
     pub(crate) screen: StandardScreen,
 
     rng: ThreadRng,
+    state: Execution,
+    pub(crate) last_instr: Option<Instruction>,
 }
 
 const START_ADDRESS: Address = 0x200;
 
-impl Default for Cpu {
+impl Default for Emulator {
     fn default() -> Self {
         let registers = Registers {
             program_counter: START_ADDRESS,
@@ -47,18 +52,29 @@ impl Default for Cpu {
             screen: StandardScreen::new(),
 
             rng: ThreadRng::default(),
+            state: Execution::default(),
+            last_instr: None,
         }
     }
 }
 
-impl Cpu {
+impl Emulator {
     pub(crate) fn load_program(bytes: &[u8]) -> Result<Self, MemoryError> {
         let mut cpu = Self::default();
         cpu.memory.store(bytes, START_ADDRESS)?;
         Ok(cpu)
     }
 
-    pub(crate) fn next_instr(&mut self) -> Result<Instruction, InstructionFetchError> {
+    pub(crate) fn step(&mut self) -> Result<(), StepError> {
+        if let Execution::Running = self.state {
+            let instr = self.next_instr()?;
+            self.execute(instr)
+                .map_err(|e| StepError::Execution(instr, e))?;
+        }
+        Ok(())
+    }
+
+    pub fn next_instr(&mut self) -> Result<Instruction, InstructionFetchError> {
         let a = self.memory.read(self.registers.program_counter, 2)?;
         let a = <&[u8; 2]>::try_from(a).unwrap();
         let instr = std::convert::TryInto::<Instruction>::try_into(a)?;
@@ -66,10 +82,7 @@ impl Cpu {
         Ok(instr)
     }
 
-    pub(crate) fn execute(
-        &mut self,
-        instr: Instruction,
-    ) -> Result<ExecutionResult, ExecutionError> {
+    pub fn execute(&mut self, instr: Instruction) -> Result<(), ExecutionError> {
         match instr {
             Instruction::CLS => self.screen.clear(),
 
@@ -186,7 +199,7 @@ impl Cpu {
 
             Instruction::LD_DT(vx) => self.set_vreg(vx, self.registers.delay_timer),
 
-            Instruction::LD_K(vx) => return Ok(ExecutionResult::WaitForKey(vx)),
+            Instruction::LD_K(vx) => self.state = Execution::WaitingForKey(vx),
 
             Instruction::SET_DT(vx) => self.registers.delay_timer = self.vreg(vx),
 
@@ -229,7 +242,15 @@ impl Cpu {
             }
         }
 
-        Ok(ExecutionResult::Continue)
+        Ok(())
+    }
+
+    pub(crate) fn press_key(&mut self, key: Ch8Key) {
+        self.keyboard.press_key(key);
+        if let Execution::WaitingForKey(vx) = self.state {
+            self.set_vreg(vx, Into::<u8>::into(key));
+            self.state = Execution::Running;
+        }
     }
 
     fn skip_instr(&mut self) {
@@ -262,6 +283,15 @@ impl Cpu {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub enum StepError {
+    #[error("could not fetch instruction: {0}")]
+    InstructionFetch(#[from] InstructionFetchError),
+
+    #[error("could not execute {0}: {1}")]
+    Execution(Instruction, ExecutionError),
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum InstructionFetchError {
     #[error("{0}")]
     BadInstruction(#[from] InstructionError),
@@ -290,8 +320,8 @@ mod tests {
     const REG_2: VRegister = VRegister::V2;
     const ADDR: Address = 0x321;
 
-    fn create_cpu() -> Cpu {
-        Cpu::default()
+    fn create_cpu() -> Emulator {
+        Emulator::default()
     }
 
     #[test]

@@ -11,7 +11,7 @@ use ratatui::{
 
 use crate::{
     app::App,
-    cpu::{Instruction, Registers},
+    emulator::{Instruction, Registers},
     keyboard::{Ch8Key, Ch8Keyboard, KeyState},
     screen::StandardScreen,
 };

@@ -6,10 +6,7 @@ use std::{
 use ratatui::DefaultTerminal;
 
 use crate::{
-    cpu::{
-        Cpu, ExecutionError, ExecutionResult, Instruction, InstructionFetchError, MemoryError,
-        Registers, VRegister,
-    },
+    emulator::{Emulator, Instruction, MemoryError, Registers, StepError},
     input,
     keyboard::{Ch8Key, Ch8Keyboard},
     screen::StandardScreen,
@@ -23,10 +20,15 @@ const FRAME_RATE: f64 = 60.0;
 
 #[derive(Debug, Clone)]
 pub(crate) enum Action {
+    /// Exit the program
     Quit,
+    /// Pause the emulator
     TogglePause,
+    /// The user pressed a key on the emulator keyboard
     Chip8KeyPress(Ch8Key),
+    /// Load a new program
     _LoadProgram(Vec<u8>),
+    /// Change the clock speed
     _ChangeClockSpeed(f64),
 }
 
@@ -36,25 +38,21 @@ impl Display for Action {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum State {
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum EmulatorState {
+    #[default]
     Running,
-    Paused(PauseOrigin),
+    Stepping,
+    Paused,
     Terminated,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PauseOrigin {
-    UserPause,
-    LoadKeyInstruction(VRegister),
 }
 
 #[derive(Debug)]
 pub(crate) struct App {
     history: Vec<Instruction>,
-    pub(crate) cpu: Cpu,
+    pub(crate) emulator: Emulator,
 
-    state: State,
+    emulator_state: EmulatorState,
 
     tick_interval: Duration,
     next_tick: Instant,
@@ -66,9 +64,9 @@ impl Default for App {
     fn default() -> Self {
         Self {
             history: Vec::new(),
-            cpu: Cpu::default(),
+            emulator: Emulator::default(),
 
-            state: State::Running,
+            emulator_state: EmulatorState::default(),
 
             tick_interval: Duration::from_secs_f64(1.0 / DEFAULT_CLOCK_SPEED),
             next_tick: Instant::now(),
@@ -84,49 +82,41 @@ impl App {
     }
 
     fn terminate(&mut self) {
-        self.state = State::Terminated;
+        self.emulator_state = EmulatorState::Terminated
     }
 
     fn pause(&mut self) {
-        self.state = State::Paused(PauseOrigin::UserPause);
+        self.emulator_state = EmulatorState::Paused
     }
 
     fn resume(&mut self) {
-        self.state = State::Running;
+        self.emulator_state = EmulatorState::Running;
         self.next_tick = Instant::now() + self.tick_interval;
         self.next_frame = Instant::now() + self.frame_interval;
     }
 
     pub fn load_program(&mut self, bytes: &[u8]) -> Result<()> {
-        self.cpu = Cpu::load_program(bytes).map_err(Chip8Error::ProgramLoadingFailed)?;
+        self.emulator = Emulator::load_program(bytes).map_err(Chip8Error::ProgramLoadingFailed)?;
         self.history.clear();
         Ok(())
     }
 
     pub(crate) fn handle_action(&mut self, action: &Action) -> Result<()> {
-        match action {
-            Action::Quit => self.terminate(),
+        match (action, self.emulator_state) {
+            (Action::Quit, _) => self.terminate(),
 
-            Action::TogglePause => match self.state {
-                State::Running => self.pause(),
-                State::Paused(PauseOrigin::UserPause) => self.resume(),
-                _ => {}
-            },
+            (Action::TogglePause, EmulatorState::Running | EmulatorState::Stepping) => self.pause(),
+            (Action::TogglePause, EmulatorState::Paused) => self.resume(),
+            (Action::TogglePause, _) => {}
 
-            Action::Chip8KeyPress(ch8_key) => {
-                if let State::Paused(PauseOrigin::LoadKeyInstruction(vx)) = self.state {
-                    self.cpu.set_vreg(vx, Into::<u8>::into(*ch8_key));
-                    self.resume();
-                } else {
-                    self.cpu.keyboard.press_key(*ch8_key)
-                }
+            (Action::Chip8KeyPress(ch8_key), EmulatorState::Running | EmulatorState::Stepping) => {
+                self.emulator.press_key(*ch8_key)
             }
+            (Action::Chip8KeyPress(_), _) => {}
 
-            Action::_LoadProgram(bytes) => {
-                self.load_program(bytes)?;
-            }
+            (Action::_LoadProgram(bytes), _) => self.load_program(bytes)?,
 
-            Action::_ChangeClockSpeed(frequency) => self.set_clock_speed(*frequency),
+            (Action::_ChangeClockSpeed(frequency), _) => self.set_clock_speed(*frequency),
         }
         Ok(())
     }
@@ -135,38 +125,28 @@ impl App {
         &mut self,
         terminal: &mut DefaultTerminal,
     ) -> std::result::Result<(), RunError> {
-        while self.state != State::Terminated {
+        while self.emulator_state != EmulatorState::Terminated {
             for a in input::poll_action().map_err(RunError::ActionPollFailed)? {
                 self.handle_action(&a).map_err(|e| RunError::Action(a, e))?;
             }
 
-            if self.state == State::Running {
-                let pc = self.cpu.registers.program_counter;
+            if self.emulator_state == EmulatorState::Running {
+                let pc = self.emulator.registers.program_counter;
 
-                let instr = self.cpu.next_instr()?;
-                let res = self
-                    .cpu
-                    .execute(instr)
-                    .map_err(|e| RunError::Execution(instr, e))?;
-                self.history.push(instr);
-                match res {
-                    ExecutionResult::Continue => {}
-                    ExecutionResult::WaitForKey(vx) => {
-                        self.state = State::Paused(PauseOrigin::LoadKeyInstruction(vx))
-                    }
-                }
+                self.emulator.step()?;
+                self.history.push(self.emulator.last_instr.unwrap());
 
-                if self.cpu.registers.program_counter == pc {
+                if self.emulator.registers.program_counter == pc {
                     self.terminate();
                 };
 
                 if Instant::now() > self.next_frame {
-                    self.cpu.decrease_delay_timer();
-                    self.cpu.decrease_sound_timer();
+                    self.emulator.decrease_delay_timer();
+                    self.emulator.decrease_sound_timer();
                     terminal
                         .draw(|frame| tui::draw(self, frame))
                         .map_err(RunError::RenderFailed)?;
-                    self.cpu.keyboard.release_keys();
+                    self.emulator.keyboard.release_keys();
                     self.next_frame += self.frame_interval;
                 }
             }
@@ -179,7 +159,7 @@ impl App {
     }
 
     pub(crate) fn registers(&self) -> &Registers {
-        &self.cpu.registers
+        &self.emulator.registers
     }
 
     pub(crate) fn history(&self) -> &[Instruction] {
@@ -187,11 +167,11 @@ impl App {
     }
 
     pub(crate) fn screen(&self) -> &StandardScreen {
-        &self.cpu.screen
+        &self.emulator.screen
     }
 
     pub(crate) fn keyboard(&self) -> &Ch8Keyboard {
-        &self.cpu.keyboard
+        &self.emulator.keyboard
     }
 }
 
@@ -206,11 +186,8 @@ pub enum RunError {
     #[error("could not handle {0}: {1}")]
     Action(Action, Chip8Error),
 
-    #[error("could not execute {0}: {1}")]
-    Execution(Instruction, ExecutionError),
-
-    #[error("could not fetch instruction: ")]
-    InstructionFetch(#[from] InstructionFetchError),
+    #[error("emulator tick failed: {0}")]
+    Execution(#[from] StepError),
 
     #[error("could not poll actions: {0}")]
     ActionPollFailed(std::io::Error),
