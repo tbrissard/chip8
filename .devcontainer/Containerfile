@@ -1,8 +1,13 @@
-FROM rust:latest
+FROM rust:1.96.0-trixie
 
-RUN apt update && apt install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  curl \
   lldb \
-  wl-clipboard
+  wl-clipboard \
+  xz-utils \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN ln -s /usr/bin/lldb /usr/bin/lldb-dap # needed for debugging in helix
 
 RUN rustup component add \
   rust-analyzer \
@@ -12,15 +17,27 @@ RUN rustup component add \
 # Install cargo-binstall using the recommended method
 RUN curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
-# Helix
+# Create non-root user
+ARG USER=dev
+ARG UID=1000
+ARG GID=1000
+
+RUN groupadd --gid $GID $USER && \
+  useradd --create-home --uid $UID --gid $GID --shell /bin/bash $USER
+
+# ====================Helix installation====================
 ARG HELIX_VERSION=25.07.1
-ENV HELIX_DIR=helix-$HELIX_VERSION-x86_64-linux
-ENV HELIX_ARCHIVE=$HELIX_DIR.tar.xz
+ARG HELIX_DIR=helix-${HELIX_VERSION}-x86_64-linux
+ARG HELIX_ARCHIVE=$HELIX_DIR.tar.xz
 
-RUN curl -LO https://github.com/helix-editor/helix/releases/download/$HELIX_VERSION/$HELIX_ARCHIVE \
-  && tar xf $HELIX_ARCHIVE
-RUN mv $HELIX_DIR/hx $HELIX_DIR/runtime /usr/local/bin/
-RUN rm -r $HELIX_ARCHIVE $HELIX_DIR
-RUN ln -s /usr/bin/lldb /usr/bin/lldb-dap
+RUN \
+  curl -sSfLO https://github.com/helix-editor/helix/releases/download/$HELIX_VERSION/$HELIX_ARCHIVE \
+  && tar xf $HELIX_ARCHIVE \
+  && mv $HELIX_DIR/hx /usr/local/bin \
+  && mv $HELIX_DIR/runtime /usr/local/bin/runtime \
+  && rm -f $HELIX_ARCHIVE \
+  && rm -rf $HELIX_DIR
 
-CMD ["hx"]
+USER $USER
+WORKDIR /workspace
+CMD ["/bin/bash"]
