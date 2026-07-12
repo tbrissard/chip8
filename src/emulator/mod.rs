@@ -70,6 +70,7 @@ impl Emulator {
             let instr = self.next_instr()?;
             self.execute(instr)
                 .map_err(|e| StepError::Execution(instr, e))?;
+            self.last_instr = Some(instr);
         }
         Ok(())
     }
