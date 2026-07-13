@@ -89,8 +89,7 @@ pub(crate) struct Registers {
     pub(crate) delay_timer: TimerValue,
     pub(crate) sound_timer: TimerValue,
 
-    // Not accessible by programs
-    /// used to store the currently executing address
+    /// Stores the next instruction's address
     pub(crate) program_counter: Address,
 
     /// The stack pointer (SP) can be 8-bit, it is used to point to the topmost level of the stack.

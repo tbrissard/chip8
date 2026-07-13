@@ -2,7 +2,7 @@
 
 A simple chip8 emulator/interpreter written in Rust.
 
-## Compilation
+## Build
 
 ```bash
 git clone https://github.com/tbrissard/chip8.git
@@ -28,6 +28,7 @@ You can find chip8 ROMs [here](https://github.com/dmatlack/chip8/tree/master/rom
 
 ## Todo
 
+- add documentation
 - display available shortcuts
 - look into mpsc channels and async/event-driven
 - check test coverage and add tests where missing
@@ -35,3 +36,4 @@ You can find chip8 ROMs [here](https://github.com/dmatlack/chip8/tree/master/rom
 - emit sound when sound timer is on (or find a way to signal it)
 - add support for some chip8 extension (superchip, megachip, etc)
 - add keyboard mapping
+- state saving

@@ -45,7 +45,9 @@ impl Display for Action {
 enum EmulatorState {
     #[default]
     Running,
+    /// The emulator will enter the [Paused] state after the next instruction
     Stepping,
+    /// The execution is paused
     Paused,
     Terminated,
 }
@@ -157,7 +159,7 @@ impl App {
         terminal: &mut DefaultTerminal,
     ) -> std::result::Result<(), RunError> {
         while self.emulator_state != EmulatorState::Terminated {
-            for a in input::poll_action().map_err(RunError::ActionPollFailed)? {
+            for a in input::poll_actions().map_err(RunError::ActionPollFailed)? {
                 self.handle_action(&a).map_err(|e| RunError::Action(a, e))?;
             }
 
@@ -172,6 +174,7 @@ impl App {
                     self.history.push(last_instr);
 
                     if self.emulator.registers.program_counter == pc {
+                        // the program has entered a dead state
                         self.terminate();
                     };
                 }

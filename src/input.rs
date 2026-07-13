@@ -4,7 +4,7 @@ use ratatui::crossterm::event::{self, KeyCode, KeyEvent};
 
 use crate::{app::Action, keyboard::Ch8Key};
 
-pub(crate) fn poll_action() -> Result<Vec<Action>, std::io::Error> {
+pub(crate) fn poll_actions() -> Result<Vec<Action>, std::io::Error> {
     let mut actions = Vec::new();
 
     while event::poll(Duration::from_secs(0))? {
