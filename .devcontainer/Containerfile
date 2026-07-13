@@ -26,6 +26,7 @@ RUN groupadd --gid $GID $USER && \
   useradd --create-home --uid $UID --gid $GID --shell /bin/bash $USER
 
 # ====================Helix installation====================
+ENV EDITOR=hx
 ARG HELIX_VERSION=25.07.1
 ARG HELIX_DIR=helix-${HELIX_VERSION}-x86_64-linux
 ARG HELIX_ARCHIVE=$HELIX_DIR.tar.xz
