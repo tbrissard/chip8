@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashMap, sync::LazyLock, time::Duration};
 
 use ratatui::crossterm::event::{self, KeyCode, KeyEvent};
 
@@ -18,16 +18,26 @@ pub(crate) fn poll_action() -> Result<Vec<Action>, std::io::Error> {
     Ok(actions)
 }
 
+const QUIT: KeyCode = KeyCode::Char('q');
+const PAUSE: KeyCode = KeyCode::Char('p');
+const STEP: KeyCode = KeyCode::Char('s');
+
+pub(crate) static KEYBINDS: LazyLock<HashMap<KeyCode, (Action, &'static str)>> =
+    LazyLock::new(|| {
+        HashMap::from([
+            (QUIT, (Action::Quit, "Exit")),
+            (PAUSE, (Action::TogglePause, "Pause/Unpause")),
+            (STEP, (Action::Step, "Step to next instruction")),
+        ])
+    });
+
 pub(crate) fn handle_key_event(event: KeyEvent) -> Option<Action> {
-    Some(match Ch8Key::try_from(event.code) {
-        Ok(ch8_key) => Action::Chip8KeyPress(ch8_key),
-        Err(InputError::KeyNotBound(key_code)) => match key_code {
-            KeyCode::Char('q') | KeyCode::Esc => Action::Quit,
-            KeyCode::Char('p') => Action::TogglePause,
-            KeyCode::Char('s') => Action::Step,
-            _ => None?,
-        },
-    })
+    match Ch8Key::try_from(event.code) {
+        Ok(ch8_key) => Some(Action::Chip8KeyPress(ch8_key)),
+        Err(InputError::NotAVirtualKey(key_code)) => {
+            KEYBINDS.get(&key_code).map(|(action, _)| action.clone())
+        }
+    }
 }
 
 impl TryFrom<KeyCode> for Ch8Key {
@@ -51,7 +61,7 @@ impl TryFrom<KeyCode> for Ch8Key {
             KeyCode::Char('d') => Ch8Key::D,
             KeyCode::Char('e') => Ch8Key::E,
             KeyCode::Char('f') => Ch8Key::F,
-            _ => return Err(InputError::KeyNotBound(value)),
+            _ => return Err(InputError::NotAVirtualKey(value)),
         })
     }
 }
@@ -59,5 +69,5 @@ impl TryFrom<KeyCode> for Ch8Key {
 #[derive(Debug, thiserror::Error)]
 pub enum InputError {
     #[error("{0} is not bound to the virtual keyboard")]
-    KeyNotBound(KeyCode),
+    NotAVirtualKey(KeyCode),
 }

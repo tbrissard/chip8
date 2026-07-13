@@ -6,12 +6,13 @@ use ratatui::{
     style::{Modifier, Style, Stylize},
     symbols::border,
     text::{Line, Text, ToLine, ToText},
-    widgets::{Block, Borders, Padding, Paragraph},
+    widgets::{Block, Borders, Paragraph},
 };
 
 use crate::{
     app::App,
     emulator::{Instruction, Registers},
+    input,
     keyboard::{Ch8Key, Ch8Keyboard, KeyState},
     screen::StandardScreen,
 };
@@ -27,12 +28,14 @@ pub(crate) fn draw(app: &App, frame: &mut Frame) {
     let inner_layout = Layout::vertical(vec![
         Constraint::Length(StandardScreen::HEIGHT as u16 + 2),
         Constraint::Fill(1),
+        Constraint::Length(input::KEYBINDS.len() as u16 + 2),
     ])
     .split(layout[0]);
 
     let buf = frame.buffer_mut();
     render_screen(app.screen(), inner_layout[0], buf);
     render_keyboard(app.keyboard(), inner_layout[1], buf);
+    render_keybinds(inner_layout[2], buf);
     render_history(app.history(), layout[1], buf);
     render_registers(app.registers(), layout[2], buf);
 }
@@ -57,6 +60,16 @@ fn render_history(history: &[Instruction], area: Rect, buf: &mut Buffer) {
         .render(area, buf);
 }
 
+fn render_keybinds(area: Rect, buf: &mut Buffer) {
+    let title = Line::from("Keybinds").bold().centered();
+    let block = Block::bordered().title(title).border_set(border::THICK);
+    let text = input::KEYBINDS
+        .iter()
+        .map(|(kc, (_, d))| format!("{kc}: {d}"))
+        .collect::<Text>();
+    Paragraph::new(text).block(block).render(area, buf);
+}
+
 fn render_keyboard(keyboard: &Ch8Keyboard, area: Rect, buf: &mut Buffer) {
     let title = Line::from("Keyboard").bold().centered();
     let block = Block::bordered().title(title).border_set(border::THICK);
@@ -65,13 +78,13 @@ fn render_keyboard(keyboard: &Ch8Keyboard, area: Rect, buf: &mut Buffer) {
     const HORIZONTAL_SPACING: u16 = 3;
     const VERTICAL_SPACING: u16 = 1;
 
-    let layout = Layout::horizontal(vec![Constraint::Percentage(25); 4])
+    let layout = Layout::horizontal(vec![Constraint::Length(5); 4])
         .spacing(HORIZONTAL_SPACING)
         .split(block_area);
     let inners = layout
         .iter()
         .flat_map(|l| {
-            Layout::vertical(vec![Constraint::Length(5); 4])
+            Layout::vertical(vec![Constraint::Length(3); 4])
                 .spacing(VERTICAL_SPACING)
                 .split(*l)
                 .to_vec()
@@ -107,7 +120,7 @@ fn render_keyboard(keyboard: &Ch8Keyboard, area: Rect, buf: &mut Buffer) {
             Ch8Key::F => inners[15],
         };
 
-        let cell_block = Block::bordered().padding(Padding::vertical(1)).style(style);
+        let cell_block = Block::bordered().style(style);
         let inner = cell_block.inner(cell);
         cell_block.render(cell, buf);
 
