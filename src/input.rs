@@ -24,6 +24,7 @@ pub(crate) fn handle_key_event(event: KeyEvent) -> Option<Action> {
         Err(InputError::KeyNotBound(key_code)) => match key_code {
             KeyCode::Char('q') | KeyCode::Esc => Action::Quit,
             KeyCode::Char('p') => Action::TogglePause,
+            KeyCode::Char('s') => Action::Step,
             _ => None?,
         },
     })

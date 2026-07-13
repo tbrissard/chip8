@@ -22,8 +22,10 @@ const FRAME_RATE: f64 = 60.0;
 pub(crate) enum Action {
     /// Exit the program
     Quit,
-    /// Pause the emulator
+    /// Pause/Resume the emulator
     TogglePause,
+    /// Only execute the next instruction, then pause the emulator
+    Step,
     /// The user pressed a key on the emulator keyboard
     Chip8KeyPress(Ch8Key),
     /// Load a new program
@@ -95,6 +97,10 @@ impl App {
         self.next_frame = Instant::now() + self.frame_interval;
     }
 
+    fn step(&mut self) {
+        self.emulator_state = EmulatorState::Stepping;
+    }
+
     pub fn load_program(&mut self, bytes: &[u8]) -> Result<()> {
         self.emulator = Emulator::load_program(bytes).map_err(Chip8Error::ProgramLoadingFailed)?;
         self.history.clear();
@@ -108,6 +114,9 @@ impl App {
             (Action::TogglePause, EmulatorState::Running | EmulatorState::Stepping) => self.pause(),
             (Action::TogglePause, EmulatorState::Paused) => self.resume(),
             (Action::TogglePause, _) => {}
+
+            (Action::Step, EmulatorState::Running | EmulatorState::Paused) => self.step(),
+            (Action::Step, _) => {}
 
             (Action::Chip8KeyPress(ch8_key), EmulatorState::Running | EmulatorState::Stepping) => {
                 self.emulator.press_key(*ch8_key)
@@ -130,7 +139,10 @@ impl App {
                 self.handle_action(&a).map_err(|e| RunError::Action(a, e))?;
             }
 
-            if self.emulator_state == EmulatorState::Running {
+            if matches!(
+                self.emulator_state,
+                EmulatorState::Running | EmulatorState::Stepping
+            ) {
                 if self.emulator.cpu_state == CpuState::Running {
                     let pc = self.emulator.registers.program_counter;
 
@@ -150,6 +162,10 @@ impl App {
                         .map_err(RunError::RenderFailed)?;
                     self.emulator.keyboard.release_keys();
                     self.next_frame += self.frame_interval;
+                }
+
+                if matches!(self.emulator_state, EmulatorState::Stepping) {
+                    self.pause();
                 }
             }
 
