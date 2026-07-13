@@ -44,7 +44,7 @@ impl From<&[u8]> for Sprite {
 
 pub(crate) type StandardScreen = Screen<u64, 32>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Screen<T, const N: usize> {
     pixels: [T; N],
 }

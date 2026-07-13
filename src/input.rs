@@ -21,6 +21,7 @@ pub(crate) fn poll_action() -> Result<Vec<Action>, std::io::Error> {
 const QUIT: KeyCode = KeyCode::Char('q');
 const PAUSE: KeyCode = KeyCode::Char('p');
 const STEP: KeyCode = KeyCode::Char('s');
+const RESET: KeyCode = KeyCode::Char('r');
 
 pub(crate) static KEYBINDS: LazyLock<HashMap<KeyCode, (Action, &'static str)>> =
     LazyLock::new(|| {
@@ -28,6 +29,10 @@ pub(crate) static KEYBINDS: LazyLock<HashMap<KeyCode, (Action, &'static str)>> =
             (QUIT, (Action::Quit, "Exit")),
             (PAUSE, (Action::TogglePause, "Pause/Unpause")),
             (STEP, (Action::Step, "Step to next instruction")),
+            (
+                RESET,
+                (Action::Reset, "Resets the emulator to its starting state"),
+            ),
         ])
     });
 

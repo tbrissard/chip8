@@ -5,7 +5,7 @@ const MEMORY_SIZE: Address = 0xFFF;
 
 type Result<T> = std::result::Result<T, MemoryError>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Memory {
     data: [u8; MEMORY_SIZE as usize],
 }

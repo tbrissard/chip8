@@ -76,7 +76,7 @@ impl TryFrom<u8> for VRegister {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct Registers {
     /// Chip-8 has 16 general purpose 8-bit registers, usually referred to as Vx, where x is a hexadecimal digit (0 through F).
     /// The VF register should not be used by any program, as it is used as a flag by some instructions.

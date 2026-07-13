@@ -24,7 +24,7 @@ pub(super) enum CpuState {
     WaitingForKey(VRegister),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Emulator {
     pub(crate) registers: Registers,
     pub(crate) keyboard: Ch8Keyboard,

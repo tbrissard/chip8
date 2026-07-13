@@ -19,7 +19,7 @@ impl Default for Ch8Keyboard {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Ch8Keyboard {
     states: [KeyState; 16],
 }

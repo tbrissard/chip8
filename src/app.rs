@@ -17,19 +17,20 @@ pub type Result<T> = std::result::Result<T, Chip8Error>;
 
 const DEFAULT_CLOCK_SPEED: f64 = 60.0;
 const FRAME_RATE: f64 = 60.0;
+const TIMER_TICK_RATE: f64 = 60.0;
 
 #[derive(Debug, Clone)]
 pub(crate) enum Action {
-    /// Exit the program
+    /// Exit the emulator
     Quit,
+    /// Resets the loaded program
+    Reset,
     /// Pause/Resume the emulator
     TogglePause,
     /// Only execute the next instruction, then pause the emulator
     Step,
     /// The user pressed a key on the emulator keyboard
     Chip8KeyPress(Ch8Key),
-    /// Load a new program
-    _LoadProgram(Vec<u8>),
     /// Change the clock speed
     _ChangeClockSpeed(f64),
 }
@@ -55,11 +56,14 @@ pub(crate) struct App {
     pub(crate) emulator: Emulator,
 
     emulator_state: EmulatorState,
+    initial_snapshot: Emulator,
 
-    tick_interval: Duration,
-    next_tick: Instant,
+    tick_interval_app: Duration,
+    next_tick_app: Instant,
     frame_interval: Duration,
     next_frame: Instant,
+    tick_interval_timer: Duration,
+    next_tick_timer: Instant,
 }
 
 impl Default for App {
@@ -69,22 +73,29 @@ impl Default for App {
             emulator: Emulator::default(),
 
             emulator_state: EmulatorState::default(),
+            initial_snapshot: Emulator::default(),
 
-            tick_interval: Duration::from_secs_f64(1.0 / DEFAULT_CLOCK_SPEED),
-            next_tick: Instant::now(),
+            tick_interval_app: Duration::from_secs_f64(1.0 / DEFAULT_CLOCK_SPEED),
+            next_tick_app: Instant::now(),
             frame_interval: Duration::from_secs_f64(1.0 / FRAME_RATE),
             next_frame: Instant::now(),
+            tick_interval_timer: Duration::from_secs_f64(1.0 / TIMER_TICK_RATE),
+            next_tick_timer: Instant::now(),
         }
     }
 }
 
 impl App {
     pub fn set_clock_speed(&mut self, frequency: f64) {
-        self.tick_interval = Duration::from_secs_f64(1.0 / frequency)
+        self.tick_interval_app = Duration::from_secs_f64(1.0 / frequency)
     }
 
     fn terminate(&mut self) {
         self.emulator_state = EmulatorState::Terminated
+    }
+
+    fn reset(&mut self) {
+        self.sets_emulator_state(self.initial_snapshot.clone());
     }
 
     fn pause(&mut self) {
@@ -93,7 +104,7 @@ impl App {
 
     fn resume(&mut self) {
         self.emulator_state = EmulatorState::Running;
-        self.next_tick = Instant::now() + self.tick_interval;
+        self.next_tick_app = Instant::now() + self.tick_interval_app;
         self.next_frame = Instant::now() + self.frame_interval;
     }
 
@@ -101,15 +112,27 @@ impl App {
         self.emulator_state = EmulatorState::Stepping;
     }
 
-    pub fn load_program(&mut self, bytes: &[u8]) -> Result<()> {
-        self.emulator = Emulator::load_program(bytes).map_err(Chip8Error::ProgramLoadingFailed)?;
+    fn sets_emulator_state(&mut self, emulator: Emulator) {
+        self.emulator = emulator;
         self.history.clear();
+    }
+
+    pub fn load_rom(&mut self, bytes: &[u8]) -> Result<()> {
+        let emu = Emulator::load_program(bytes).map_err(Chip8Error::ProgramLoadingFailed)?;
+        self.sets_emulator_state(emu);
+        self.initial_snapshot = self.emulator.clone();
         Ok(())
     }
 
     pub(crate) fn handle_action(&mut self, action: &Action) -> Result<()> {
         match (action, self.emulator_state) {
             (Action::Quit, _) => self.terminate(),
+
+            (
+                Action::Reset,
+                EmulatorState::Running | EmulatorState::Stepping | EmulatorState::Paused,
+            ) => self.reset(),
+            (Action::Reset, EmulatorState::Terminated) => {}
 
             (Action::TogglePause, EmulatorState::Running | EmulatorState::Stepping) => self.pause(),
             (Action::TogglePause, EmulatorState::Paused) => self.resume(),
@@ -122,8 +145,6 @@ impl App {
                 self.emulator.press_key(*ch8_key)
             }
             (Action::Chip8KeyPress(_), _) => {}
-
-            (Action::_LoadProgram(bytes), _) => self.load_program(bytes)?,
 
             (Action::_ChangeClockSpeed(frequency), _) => self.set_clock_speed(*frequency),
         }
@@ -154,14 +175,11 @@ impl App {
                     };
                 }
 
-                if Instant::now() > self.next_frame {
+                if Instant::now() > self.next_tick_timer {
                     self.emulator.decrease_delay_timer();
                     self.emulator.decrease_sound_timer();
-                    terminal
-                        .draw(|frame| tui::draw(self, frame))
-                        .map_err(RunError::RenderFailed)?;
+                    self.next_tick_timer += self.tick_interval_timer;
                     self.emulator.keyboard.release_keys();
-                    self.next_frame += self.frame_interval;
                 }
 
                 if matches!(self.emulator_state, EmulatorState::Stepping) {
@@ -169,8 +187,15 @@ impl App {
                 }
             }
 
-            std::thread::sleep(self.next_tick.saturating_duration_since(Instant::now()));
-            self.next_tick += self.tick_interval;
+            if Instant::now() > self.next_frame {
+                terminal
+                    .draw(|frame| tui::draw(self, frame))
+                    .map_err(RunError::RenderFailed)?;
+                self.next_frame += self.frame_interval;
+            }
+
+            std::thread::sleep(self.next_tick_app.saturating_duration_since(Instant::now()));
+            self.next_tick_app += self.tick_interval_app;
         }
 
         Ok(())

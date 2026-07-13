@@ -21,7 +21,7 @@ struct Args {
 #[derive(Debug, Subcommand)]
 enum Command {
     Run {
-        program: PathBuf,
+        rom: PathBuf,
 
         /// Number of instructions per second
         #[arg(long)]
@@ -33,16 +33,13 @@ fn main() {
     let args = Args::parse();
 
     match args.command {
-        Command::Run {
-            program,
-            clock_speed,
-        } => {
+        Command::Run { rom, clock_speed } => {
             let mut app = App::default();
-            let program = std::fs::read(program).unwrap();
+            let bytes = std::fs::read(rom).unwrap();
+            app.load_rom(&bytes).unwrap();
             if let Some(frequency) = clock_speed {
                 app.set_clock_speed(frequency);
             }
-            app.load_program(&program).unwrap();
             ratatui::run(|terminal| app.run(terminal)).unwrap();
         }
     }
