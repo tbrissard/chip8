@@ -31,7 +31,7 @@ pub(crate) static KEYBINDS: LazyLock<HashMap<KeyCode, (Action, &'static str)>> =
             (STEP, (Action::Step, "Step to next instruction")),
             (
                 RESET,
-                (Action::Reset, "Resets the emulator to its starting state"),
+                (Action::Reset, "Reset the game"),
             ),
         ])
     });

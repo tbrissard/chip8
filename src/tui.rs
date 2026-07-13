@@ -1,5 +1,4 @@
 use ratatui::{
-    Frame,
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
     prelude::Widget,
@@ -7,6 +6,7 @@ use ratatui::{
     symbols::border,
     text::{Line, Text, ToLine, ToText},
     widgets::{Block, Borders, Paragraph},
+    Frame,
 };
 
 use crate::{
@@ -20,24 +20,28 @@ use crate::{
 pub(crate) fn draw(app: &App, frame: &mut Frame) {
     let layout = Layout::horizontal(vec![
         Constraint::Length(StandardScreen::WIDTH as u16 + 2),
+        Constraint::Min(29),
         Constraint::Length(17),
         Constraint::Length(35),
     ])
     .split(frame.area());
 
-    let inner_layout = Layout::vertical(vec![
-        Constraint::Length(StandardScreen::HEIGHT as u16 + 2),
-        Constraint::Fill(1),
+    let second_column = Layout::vertical(vec![
+        Constraint::Length(15),
         Constraint::Length(input::KEYBINDS.len() as u16 + 2),
     ])
-    .split(layout[0]);
+    .split(layout[1]);
 
     let buf = frame.buffer_mut();
-    render_screen(app.screen(), inner_layout[0], buf);
-    render_keyboard(app.keyboard(), inner_layout[1], buf);
-    render_keybinds(inner_layout[2], buf);
-    render_history(app.history(), layout[1], buf);
-    render_registers(app.registers(), layout[2], buf);
+    render_screen(app.screen(), layout[0], buf);
+    render_keyboard(
+        app.keyboard(),
+        second_column[0].centered_horizontally(Constraint::Length(29)),
+        buf,
+    );
+    render_keybinds(second_column[1], buf);
+    render_history(app.history(), layout[2], buf);
+    render_registers(app.registers(), layout[3], buf);
 }
 
 fn render_history(history: &[Instruction], area: Rect, buf: &mut Buffer) {
@@ -71,17 +75,13 @@ fn render_keybinds(area: Rect, buf: &mut Buffer) {
 }
 
 fn render_keyboard(keyboard: &Ch8Keyboard, area: Rect, buf: &mut Buffer) {
-    let title = Line::from("Keyboard").bold().centered();
-    let block = Block::bordered().title(title).border_set(border::THICK);
-    let block_area = block.inner(area);
-
     const HORIZONTAL_SPACING: u16 = 3;
     const VERTICAL_SPACING: u16 = 1;
 
-    let layout = Layout::horizontal(vec![Constraint::Length(5); 4])
+    let columns = Layout::horizontal(vec![Constraint::Length(5); 4])
         .spacing(HORIZONTAL_SPACING)
-        .split(block_area);
-    let inners = layout
+        .split(area);
+    let cells = columns
         .iter()
         .flat_map(|l| {
             Layout::vertical(vec![Constraint::Length(3); 4])
@@ -102,22 +102,22 @@ fn render_keyboard(keyboard: &Ch8Keyboard, area: Rect, buf: &mut Buffer) {
         };
 
         let cell = match k {
-            Ch8Key::Zero => inners[7],
-            Ch8Key::One => inners[2],
-            Ch8Key::Two => inners[6],
-            Ch8Key::Three => inners[10],
-            Ch8Key::Four => inners[1],
-            Ch8Key::Five => inners[5],
-            Ch8Key::Six => inners[9],
-            Ch8Key::Seven => inners[0],
-            Ch8Key::Eight => inners[4],
-            Ch8Key::Nine => inners[8],
-            Ch8Key::A => inners[3],
-            Ch8Key::B => inners[11],
-            Ch8Key::C => inners[12],
-            Ch8Key::D => inners[13],
-            Ch8Key::E => inners[14],
-            Ch8Key::F => inners[15],
+            Ch8Key::Zero => cells[7],
+            Ch8Key::One => cells[2],
+            Ch8Key::Two => cells[6],
+            Ch8Key::Three => cells[10],
+            Ch8Key::Four => cells[1],
+            Ch8Key::Five => cells[5],
+            Ch8Key::Six => cells[9],
+            Ch8Key::Seven => cells[0],
+            Ch8Key::Eight => cells[4],
+            Ch8Key::Nine => cells[8],
+            Ch8Key::A => cells[3],
+            Ch8Key::B => cells[11],
+            Ch8Key::C => cells[12],
+            Ch8Key::D => cells[13],
+            Ch8Key::E => cells[14],
+            Ch8Key::F => cells[15],
         };
 
         let cell_block = Block::bordered().style(style);
@@ -129,12 +129,15 @@ fn render_keyboard(keyboard: &Ch8Keyboard, area: Rect, buf: &mut Buffer) {
             .centered()
             .render(inner, buf);
     }
-
-    block.render(area, buf);
 }
 
 fn render_screen(screen: &StandardScreen, area: Rect, buf: &mut Buffer) {
     let title = Line::from("Display".bold());
+    let layout = Layout::vertical(vec![
+        Constraint::Length(StandardScreen::HEIGHT as u16 + 2),
+        Constraint::Fill(1),
+    ])
+    .split(area);
 
     let block = Block::bordered()
         .title(title.centered())
@@ -145,7 +148,7 @@ fn render_screen(screen: &StandardScreen, area: Rect, buf: &mut Buffer) {
     Paragraph::new(pixels)
         .centered()
         .block(block)
-        .render(area, buf);
+        .render(layout[0], buf);
 }
 
 fn render_registers(registers: &Registers, area: Rect, buf: &mut Buffer) {
