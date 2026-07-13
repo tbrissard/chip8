@@ -6,7 +6,7 @@ use std::{
 use ratatui::DefaultTerminal;
 
 use crate::{
-    emulator::{Emulator, Instruction, MemoryError, Registers, StepError},
+    emulator::{CpuState, Emulator, Instruction, MemoryError, Registers, StepError},
     input,
     keyboard::{Ch8Key, Ch8Keyboard},
     screen::StandardScreen,
@@ -131,14 +131,16 @@ impl App {
             }
 
             if self.emulator_state == EmulatorState::Running {
-                let pc = self.emulator.registers.program_counter;
+                if self.emulator.cpu_state == CpuState::Running {
+                    let pc = self.emulator.registers.program_counter;
 
-                self.emulator.step()?;
-                self.history.push(self.emulator.last_instr.unwrap());
+                    let last_instr = self.emulator.step()?;
+                    self.history.push(last_instr);
 
-                if self.emulator.registers.program_counter == pc {
-                    self.terminate();
-                };
+                    if self.emulator.registers.program_counter == pc {
+                        self.terminate();
+                    };
+                }
 
                 if Instant::now() > self.next_frame {
                     self.emulator.decrease_delay_timer();

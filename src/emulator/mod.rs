@@ -16,11 +16,11 @@ use crate::{
 mod instruction;
 mod registers;
 
-#[derive(Debug, Default, Clone, Copy)]
-enum Execution {
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CpuState {
     #[default]
     Running,
-    /// the emulator is waiting for a key to be pressed (see instruction LD_K)
+    /// the cpu is waiting for a key to be pressed (see instruction LD_K)
     WaitingForKey(VRegister),
 }
 
@@ -32,8 +32,7 @@ pub struct Emulator {
     pub(crate) screen: StandardScreen,
 
     rng: ThreadRng,
-    state: Execution,
-    pub(crate) last_instr: Option<Instruction>,
+    pub(crate) cpu_state: CpuState,
 }
 
 const START_ADDRESS: Address = 0x200;
@@ -52,8 +51,7 @@ impl Default for Emulator {
             screen: StandardScreen::new(),
 
             rng: ThreadRng::default(),
-            state: Execution::default(),
-            last_instr: None,
+            cpu_state: CpuState::default(),
         }
     }
 }
@@ -65,14 +63,12 @@ impl Emulator {
         Ok(cpu)
     }
 
-    pub(crate) fn step(&mut self) -> Result<(), StepError> {
-        if let Execution::Running = self.state {
-            let instr = self.next_instr()?;
-            self.execute(instr)
-                .map_err(|e| StepError::Execution(instr, e))?;
-            self.last_instr = Some(instr);
-        }
-        Ok(())
+    /// Execute the next instruction and returns it
+    pub(super) fn step(&mut self) -> Result<Instruction, StepError> {
+        let instr = self.next_instr()?;
+        self.execute(instr)
+            .map_err(|e| StepError::Execution(instr, e))?;
+        Ok(instr)
     }
 
     pub fn next_instr(&mut self) -> Result<Instruction, InstructionFetchError> {
@@ -200,7 +196,7 @@ impl Emulator {
 
             Instruction::LD_DT(vx) => self.set_vreg(vx, self.registers.delay_timer),
 
-            Instruction::LD_K(vx) => self.state = Execution::WaitingForKey(vx),
+            Instruction::LD_K(vx) => self.cpu_state = CpuState::WaitingForKey(vx),
 
             Instruction::SET_DT(vx) => self.registers.delay_timer = self.vreg(vx),
 
@@ -248,9 +244,9 @@ impl Emulator {
 
     pub(crate) fn press_key(&mut self, key: Ch8Key) {
         self.keyboard.press_key(key);
-        if let Execution::WaitingForKey(vx) = self.state {
+        if let CpuState::WaitingForKey(vx) = self.cpu_state {
             self.set_vreg(vx, Into::<u8>::into(key));
-            self.state = Execution::Running;
+            self.cpu_state = CpuState::Running;
         }
     }
 
