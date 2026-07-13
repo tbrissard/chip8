@@ -106,6 +106,7 @@ impl App {
         self.emulator_state = EmulatorState::Running;
         self.next_tick_app = Instant::now() + self.tick_interval_app;
         self.next_frame = Instant::now() + self.frame_interval;
+        self.next_tick_timer = Instant::now() + self.tick_interval_timer;
     }
 
     fn step(&mut self) {
