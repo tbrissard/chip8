@@ -69,7 +69,7 @@ fn render_keybinds(area: Rect, buf: &mut Buffer) {
     let block = Block::bordered().title(title).border_set(border::THICK);
     let text = input::KEYBINDS
         .iter()
-        .map(|(kc, (_, d))| format!("{kc}: {d}"))
+        .map(|(key_code, (_, description))| format!("{key_code}: {description}"))
         .collect::<Text>();
     Paragraph::new(text).block(block).render(area, buf);
 }
