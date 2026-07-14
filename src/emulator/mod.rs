@@ -19,7 +19,7 @@ mod registers;
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(super) enum CpuState {
     #[default]
-    Running,
+    Executing,
     /// the cpu is waiting for a key to be pressed (see instruction LD_K)
     WaitingForKey(VRegister),
 }
@@ -246,7 +246,7 @@ impl Emulator {
         self.keyboard.press_key(key);
         if let CpuState::WaitingForKey(vx) = self.cpu_state {
             self.set_vreg(vx, Into::<u8>::into(key));
-            self.cpu_state = CpuState::Running;
+            self.cpu_state = CpuState::Executing;
         }
     }
 
@@ -270,11 +270,8 @@ impl Emulator {
         self.registers.program_counter = addr
     }
 
-    pub(crate) fn decrease_delay_timer(&mut self) {
+    pub(crate) fn decrement_timers(&mut self) {
         self.registers.delay_timer = self.registers.delay_timer.saturating_sub(1);
-    }
-
-    pub(crate) fn decrease_sound_timer(&mut self) {
         self.registers.sound_timer = self.registers.sound_timer.saturating_sub(1);
     }
 }
@@ -392,8 +389,7 @@ mod tests {
         assert_eq!(cpu.registers.delay_timer, 0);
         assert_eq!(cpu.registers.sound_timer, 0);
 
-        cpu.decrease_delay_timer();
-        cpu.decrease_sound_timer();
+        cpu.decrement_timers();
 
         assert_eq!(cpu.registers.delay_timer, 0);
         assert_eq!(cpu.registers.sound_timer, 0);

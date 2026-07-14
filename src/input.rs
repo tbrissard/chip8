@@ -4,17 +4,24 @@ use ratatui::crossterm::event::{self, KeyCode, KeyEvent};
 
 use crate::{app::Action, keyboard::Ch8Key};
 
-pub(crate) fn poll_actions() -> Result<Vec<Action>, std::io::Error> {
-    let mut actions = Vec::new();
-
-    while event::poll(Duration::from_secs(0))? {
-        if let event::Event::Key(key_event) = event::read()?
+/// Blocks until an event is available and returns it
+pub(crate) fn read_event() -> Result<Action, EventReadingError> {
+    loop {
+        // filter out unwanted events
+        if let event::Event::Key(key_event) = event::read().map_err(EventReadingError)?
             && let Some(action) = handle_key_event(key_event)
         {
-            actions.push(action);
+            return Ok(action);
         }
     }
+}
 
+/// Non-blocking event polling
+pub(crate) fn poll_events() -> Result<Vec<Action>, EventReadingError> {
+    let mut actions = Vec::new();
+    while event::poll(Duration::ZERO).map_err(EventReadingError)? {
+        actions.push(read_event()?);
+    }
     Ok(actions)
 }
 
@@ -29,10 +36,7 @@ pub(crate) static KEYBINDS: LazyLock<HashMap<KeyCode, (Action, &'static str)>> =
             (QUIT, (Action::Quit, "Exit")),
             (PAUSE, (Action::TogglePause, "Pause/Unpause")),
             (STEP, (Action::Step, "Step to next instruction")),
-            (
-                RESET,
-                (Action::Reset, "Reset the game"),
-            ),
+            (RESET, (Action::Reset, "Reset the game")),
         ])
     });
 
@@ -76,3 +80,7 @@ pub enum InputError {
     #[error("{0} is not bound to the virtual keyboard")]
     NotAVirtualKey(KeyCode),
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error("IO error: {0}")]
+pub struct EventReadingError(std::io::Error);
