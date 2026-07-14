@@ -105,10 +105,10 @@ where
         let mut mask = T::one() << (Self::WIDTH - 1);
 
         for _ in 0..Self::WIDTH {
-            let pixel = if (self.pixels[row] & mask) != T::zero() {
-                Self::PIXEL_ON
-            } else {
+            let pixel = if (self.pixels[row] & mask) == T::zero() {
                 Self::PIXEL_OFF
+            } else {
+                Self::PIXEL_ON
             };
             pixels.push(pixel);
             mask = mask >> 1;
@@ -141,7 +141,7 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for l in self.lines() {
-            writeln!(f, "{l}",)?;
+            writeln!(f, "{l}")?;
         }
 
         Ok(())
@@ -149,9 +149,10 @@ where
 }
 
 #[cfg(test)]
+#[allow(clippy::unreadable_literal)]
 mod tests {
 
-    use super::{DIGITS, Sprite, StandardScreen};
+    use super::{Sprite, StandardScreen, DIGITS};
 
     fn create_screen() -> StandardScreen {
         StandardScreen::new()

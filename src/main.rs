@@ -1,8 +1,10 @@
+#![warn(clippy::pedantic)]
+
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-use crate::app::App;
+use crate::{app::App, input::CrosstermInputManager};
 
 mod app;
 mod emulator;
@@ -34,7 +36,7 @@ fn main() {
 
     match args.command {
         Command::Run { rom, clock_speed } => {
-            let mut app = App::default();
+            let mut app = App::<CrosstermInputManager>::default();
             let bytes = std::fs::read(rom).unwrap();
             app.load_rom(&bytes).unwrap();
             clock_speed.inspect(|frequency| app.set_clock_speed(*frequency));

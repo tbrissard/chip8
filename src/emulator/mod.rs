@@ -1,9 +1,9 @@
-use rand::{RngExt, rngs::ThreadRng};
+use rand::{rngs::ThreadRng, RngExt};
 
 pub(crate) use crate::emulator::instruction::{Instruction, InstructionError};
 pub(crate) use crate::emulator::registers::Registers;
 pub(crate) use crate::emulator::registers::VRegister;
-pub(crate) use crate::emulator::registers::VRegisterValue;
+pub(crate) use crate::emulator::registers::ValueRegister;
 use crate::keyboard::Ch8Key;
 pub(crate) use crate::memory::MemoryError;
 use crate::{
@@ -20,7 +20,7 @@ mod registers;
 pub(super) enum CpuState {
     #[default]
     Executing,
-    /// the cpu is waiting for a key to be pressed (see instruction LD_K)
+    /// the cpu is waiting for a key to be pressed (see instruction `LD_K`)
     WaitingForKey(VRegister),
 }
 
@@ -164,7 +164,7 @@ impl Emulator {
             Instruction::LD_I(addr) => self.registers.i = addr,
 
             Instruction::JP_V0(addr) => {
-                self.set_pc(self.vreg(VRegister::V0) as Address + addr);
+                self.set_pc(Address::from(self.vreg(VRegister::V0)) + addr);
             }
 
             Instruction::RND(vx, kk) => {
@@ -173,7 +173,7 @@ impl Emulator {
             }
 
             Instruction::DRW(vx, vy, n) => {
-                let sprite = self.memory.read(self.registers.i, n as Address)?.into();
+                let sprite = self.memory.read(self.registers.i, Address::from(n))?.into();
                 let collision = self.screen.write_sprite(
                     &sprite,
                     self.vreg(vx) as usize,
@@ -202,7 +202,7 @@ impl Emulator {
 
             Instruction::SET_ST(vx) => self.registers.sound_timer = self.vreg(vx),
 
-            Instruction::ADD_I(vx) => self.registers.i += self.vreg(vx) as Address,
+            Instruction::ADD_I(vx) => self.registers.i += Address::from(self.vreg(vx)),
 
             Instruction::LD_F(vx) => self.registers.i = memory::digit_addr(self.vreg(vx)),
 
@@ -217,7 +217,7 @@ impl Emulator {
             Instruction::LD_MEM_I(vx) => {
                 for (value, addr) in self
                     .registers
-                    .v_registers
+                    .values
                     .iter()
                     .take(vx as usize + 1)
                     .zip(self.registers.i..)
@@ -229,7 +229,7 @@ impl Emulator {
             Instruction::LD_I_MEM(vx) => {
                 for (reg, addr) in self
                     .registers
-                    .v_registers
+                    .values
                     .iter_mut()
                     .take(vx as usize + 1)
                     .zip(self.registers.i..)
@@ -254,20 +254,20 @@ impl Emulator {
         self.registers.program_counter += 2;
     }
 
-    fn vreg(&self, vreg: VRegister) -> VRegisterValue {
+    fn vreg(&self, vreg: VRegister) -> ValueRegister {
         self.registers.vreg(vreg)
     }
 
-    pub(crate) fn set_vreg(&mut self, vreg: VRegister, value: VRegisterValue) {
+    pub(crate) fn set_vreg(&mut self, vreg: VRegister, value: ValueRegister) {
         self.registers.set_vreg(vreg, value);
     }
 
-    fn set_f(&mut self, value: VRegisterValue) {
+    fn set_f(&mut self, value: ValueRegister) {
         self.set_vreg(VRegister::VF, value);
     }
 
     fn set_pc(&mut self, addr: Address) {
-        self.registers.program_counter = addr
+        self.registers.program_counter = addr;
     }
 
     pub(crate) fn decrement_timers(&mut self) {

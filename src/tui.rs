@@ -12,12 +12,12 @@ use ratatui::{
 use crate::{
     app::App,
     emulator::{Instruction, Registers},
-    input,
+    input::{self, InputManager},
     keyboard::{Ch8Key, Ch8Keyboard, KeyState},
     screen::StandardScreen,
 };
 
-pub(crate) fn draw(app: &App, frame: &mut Frame) {
+pub(crate) fn draw<T: InputManager>(app: &App<T>, frame: &mut Frame) {
     let layout = Layout::horizontal(vec![
         Constraint::Length(StandardScreen::WIDTH as u16 + 2),
         Constraint::Min(29),
@@ -165,7 +165,7 @@ fn render_registers(registers: &Registers, area: Rect, buf: &mut Buffer) {
 
     let v_registers = Text::from(
         registers
-            .v_registers
+            .values
             .iter()
             .enumerate()
             .map(|(i, vreg)| Line::from(format!("V{i:2}: {vreg:3}")))

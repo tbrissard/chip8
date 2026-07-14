@@ -13,7 +13,7 @@ pub(crate) struct Memory {
 const DIGITS_ADDR: Address = 0x0;
 
 pub(crate) fn digit_addr(value: u8) -> Address {
-    DIGITS_ADDR + 5 * value as Address
+    DIGITS_ADDR + 5 * Address::from(value)
 }
 
 impl Default for Memory {

@@ -1,14 +1,13 @@
 use std::{
-    fmt::Display,
+    marker::PhantomData,
     time::{Duration, Instant},
 };
 
 use ratatui::DefaultTerminal;
 
-use crate::input::EventReadingError;
 use crate::{
     emulator::{CpuState, Emulator, Instruction, MemoryError, Registers, StepError},
-    input::{self},
+    input::InputManager,
     keyboard::{Ch8Key, Ch8Keyboard},
     screen::StandardScreen,
     tui,
@@ -34,12 +33,6 @@ pub(crate) enum Action {
     _ChangeClockSpeed(f64),
 }
 
-impl Display for Action {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum RunMode {
     #[default]
@@ -63,9 +56,10 @@ impl Default for EmulatorState {
 }
 
 #[derive(Debug)]
-pub(crate) struct App {
+pub(crate) struct App<T> {
     history: Vec<Instruction>,
     pub(crate) emulator: Emulator,
+    input_manager: PhantomData<T>,
 
     emulator_state: EmulatorState,
     initial_snapshot: Emulator,
@@ -81,11 +75,12 @@ pub(crate) struct App {
     cycles_count: u32,
 }
 
-impl Default for App {
+impl<T> Default for App<T> {
     fn default() -> Self {
         Self {
             history: Vec::new(),
             emulator: Emulator::default(),
+            input_manager: PhantomData,
 
             emulator_state: EmulatorState::default(),
             initial_snapshot: Emulator::default(),
@@ -103,13 +98,13 @@ impl Default for App {
     }
 }
 
-impl App {
+impl<T: InputManager> App<T> {
     pub fn set_clock_speed(&mut self, frequency: f64) {
-        self.emulator_tick_interval = Duration::from_secs_f64(1.0 / frequency)
+        self.emulator_tick_interval = Duration::from_secs_f64(1.0 / frequency);
     }
 
     fn terminate(&mut self) {
-        self.emulator_state = EmulatorState::Terminated
+        self.emulator_state = EmulatorState::Terminated;
     }
 
     fn reset(&mut self) {
@@ -117,7 +112,7 @@ impl App {
     }
 
     fn pause(&mut self) {
-        self.emulator_state = EmulatorState::Paused
+        self.emulator_state = EmulatorState::Paused;
     }
 
     fn resume(&mut self) {
@@ -150,39 +145,38 @@ impl App {
             (Action::Quit, _) => self.terminate(),
 
             (Action::Reset, EmulatorState::Running(_) | EmulatorState::Paused) => self.reset(),
-            (Action::Reset, EmulatorState::Terminated) => {}
 
             (Action::TogglePause, EmulatorState::Running(_)) => self.pause(),
             (Action::TogglePause, EmulatorState::Paused) => self.resume(),
-            (Action::TogglePause, _) => {}
 
             (Action::Step, EmulatorState::Running(RunMode::Standard) | EmulatorState::Paused) => {
-                self.step()
+                self.step();
             }
-            (Action::Step, _) => {}
 
             (Action::Chip8KeyPress(ch8_key), EmulatorState::Running(_)) => {
-                self.emulator.press_key(*ch8_key)
+                self.emulator.press_key(*ch8_key);
             }
-            (Action::Chip8KeyPress(_), _) => {}
 
             (Action::_ChangeClockSpeed(frequency), _) => self.set_clock_speed(*frequency),
+
+            (_, _) => {}
         }
     }
 
     /// Blocks until next event is available and process it
     fn process_next_event(&mut self) -> RunResult<()> {
-        Action::from_event(input::read_event()?).inspect(|a| self.handle_action(a));
+        if let Some(action) =
+            T::read_event().map_err(|e| RunError::CouldNotPollEvents(Box::new(e)))?
+        {
+            self.handle_action(&action);
+        }
         Ok(())
     }
 
     /// Process available events
     fn process_events(&mut self) -> RunResult<()> {
-        for action in input::poll_events()?
-            .into_iter()
-            .filter_map(Action::from_event)
-        {
-            self.handle_action(&action)
+        for action in T::poll_events().map_err(|e| RunError::CouldNotPollEvents(Box::new(e)))? {
+            self.handle_action(&action);
         }
         Ok(())
     }
@@ -226,7 +220,7 @@ impl App {
                     // execution address has not changed, the program has entered a dead state
                     self.terminate();
                     break;
-                };
+                }
 
                 self.history.push(last_instr);
                 self.cycles_count += 1;
@@ -290,7 +284,7 @@ pub enum RunError {
     Execution(#[from] StepError),
 
     #[error("could not get events: {0}")]
-    CouldNotGetEvents(#[from] EventReadingError),
+    CouldNotPollEvents(Box<dyn std::error::Error>),
 
     #[error("render failed: {0}")]
     RenderFailed(std::io::Error),

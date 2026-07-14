@@ -6,7 +6,7 @@ use std::{
 use crate::memory::Address;
 
 /// General purpose register
-pub(crate) type VRegisterValue = u8;
+pub(crate) type ValueRegister = u8;
 pub(super) type TimerValue = u8;
 
 const MAX_SUBROUTINES: u8 = 16;
@@ -38,15 +38,15 @@ impl Display for VRegister {
 }
 
 impl Index<VRegister> for Registers {
-    type Output = VRegisterValue;
+    type Output = ValueRegister;
     fn index(&self, index: VRegister) -> &Self::Output {
-        &self.v_registers[index as usize]
+        &self.values[index as usize]
     }
 }
 
 impl IndexMut<VRegister> for Registers {
     fn index_mut(&mut self, index: VRegister) -> &mut Self::Output {
-        &mut self.v_registers[index as usize]
+        &mut self.values[index as usize]
     }
 }
 
@@ -80,7 +80,7 @@ impl TryFrom<u8> for VRegister {
 pub(crate) struct Registers {
     /// Chip-8 has 16 general purpose 8-bit registers, usually referred to as Vx, where x is a hexadecimal digit (0 through F).
     /// The VF register should not be used by any program, as it is used as a flag by some instructions.
-    pub(crate) v_registers: [VRegisterValue; 16],
+    pub(crate) values: [ValueRegister; 16],
 
     /// This register is generally used to store memory addresses, so only the lowest (rightmost) 12 bits are usually used.
     pub(crate) i: Address,
@@ -121,11 +121,11 @@ impl Registers {
         Ok(addr)
     }
 
-    pub(crate) fn set_vreg(&mut self, vreg: VRegister, value: VRegisterValue) {
+    pub(crate) fn set_vreg(&mut self, vreg: VRegister, value: ValueRegister) {
         self[vreg] = value;
     }
 
-    pub(crate) fn vreg(&self, vreg: VRegister) -> VRegisterValue {
+    pub(crate) fn vreg(&self, vreg: VRegister) -> ValueRegister {
         self[vreg]
     }
 

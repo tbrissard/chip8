@@ -1,5 +1,5 @@
 use crate::{
-    emulator::registers::{VRegister, VRegisterValue},
+    emulator::registers::{VRegister, ValueRegister},
     memory::Address,
 };
 
@@ -27,12 +27,12 @@ pub enum Instruction {
     /// Skip next instruction if Vx = kk.
     ///
     /// The interpreter compares register Vx to kk, and if they are equal, increments the program counter by 2.
-    SE_Value(VRegister, VRegisterValue),
+    SE_Value(VRegister, ValueRegister),
 
     /// Skip next instruction if Vx != kk.
     ///
     /// The interpreter compares register Vx to kk, and if they are not equal, increments the program counter by 2.
-    SNE(VRegister, VRegisterValue),
+    SNE(VRegister, ValueRegister),
 
     /// Skip next instruction if Vx = Vy.
     ///
@@ -42,12 +42,12 @@ pub enum Instruction {
     /// Set Vx = kk.
     ///
     /// The interpreter puts the value kk into register Vx.
-    LD(VRegister, VRegisterValue),
+    LD(VRegister, ValueRegister),
 
     /// Set Vx = Vx + kk.
     ///
     /// Adds the value kk to the value of register Vx, then stores the result in Vx.
-    ADD(VRegister, VRegisterValue),
+    ADD(VRegister, ValueRegister),
 
     /// Stores the value of register Vy in register Vx.
     LD_Regs(VRegister, VRegister),
@@ -108,13 +108,9 @@ pub enum Instruction {
     JP_V0(Address),
 
     /// Set Vx = random byte AND kk.
-    ///
-    /// The interpreter generates a random number from 0 to 255, which is then ANDed with the value kk. The results are stored in Vx. See instruction 8xy2 for more information on AND.
-    RND(VRegister, VRegisterValue),
+    RND(VRegister, ValueRegister),
 
     /// Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
-    ///
-    /// The interpreter reads n bytes from memory, starting at the address stored in I. These bytes are then displayed as sprites on screen at coordinates (Vx, Vy). Sprites are XORed onto the existing screen. If this causes any pixels to be erased, VF is set to 1, otherwise it is set to 0. If the sprite is positioned so part of it is outside the coordinates of the display, it wraps around to the opposite side of the screen. See instruction 8xy3 for more information on XOR, and section 2.4, Display, for more information on the Chip-8 screen and sprites.
     DRW(VRegister, VRegister, u8),
 
     /// Skip next instruction if key with the value of Vx is pressed.
@@ -188,7 +184,7 @@ fn from_nibbles(high: u8, low: u8) -> u8 {
 }
 
 fn from_low_12(a: u8, b: u8, c: u8) -> u16 {
-    ((a as u16) << 8) | ((b as u16) << 4) | (c as u16)
+    (u16::from(a) << 8) | (u16::from(b) << 4) | u16::from(c)
 }
 
 impl TryFrom<&[u8; 2]> for Instruction {
@@ -336,12 +332,12 @@ mod tests {
 
     #[test]
     fn test_parsing_jp() {
-        assert_eq!(Instruction::try_from(0x1200), Ok(Instruction::JP(ADDR)))
+        assert_eq!(Instruction::try_from(0x1200), Ok(Instruction::JP(ADDR)));
     }
 
     #[test]
     fn test_parsing_call() {
-        assert_eq!(Instruction::try_from(0x2200), Ok(Instruction::CALL(ADDR)))
+        assert_eq!(Instruction::try_from(0x2200), Ok(Instruction::CALL(ADDR)));
     }
 
     #[test]
@@ -349,7 +345,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x3142),
             Ok(Instruction::SE_Value(REG_1, 0x42))
-        )
+        );
     }
 
     #[test]
@@ -357,7 +353,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x4142),
             Ok(Instruction::SNE(REG_1, 0x42))
-        )
+        );
     }
 
     #[test]
@@ -365,7 +361,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x5120),
             Ok(Instruction::SE_Reg(REG_1, REG_2))
-        )
+        );
     }
 
     #[test]
@@ -373,7 +369,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x6142),
             Ok(Instruction::LD(REG_1, 0x42))
-        )
+        );
     }
 
     #[test]
@@ -381,7 +377,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x7142),
             Ok(Instruction::ADD(REG_1, 0x42))
-        )
+        );
     }
 
     #[test]
@@ -389,7 +385,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x8120),
             Ok(Instruction::LD_Regs(REG_1, REG_2))
-        )
+        );
     }
 
     #[test]
@@ -397,7 +393,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x8121),
             Ok(Instruction::OR(REG_1, REG_2))
-        )
+        );
     }
 
     #[test]
@@ -405,7 +401,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x8122),
             Ok(Instruction::AND(REG_1, REG_2))
-        )
+        );
     }
 
     #[test]
@@ -413,7 +409,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x8123),
             Ok(Instruction::XOR(REG_1, REG_2))
-        )
+        );
     }
 
     #[test]
@@ -421,7 +417,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x8124),
             Ok(Instruction::ADD_Reg(REG_1, REG_2))
-        )
+        );
     }
 
     #[test]
@@ -429,12 +425,12 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x8125),
             Ok(Instruction::SUB(REG_1, REG_2))
-        )
+        );
     }
 
     #[test]
     fn test_parsing_shr() {
-        assert_eq!(Instruction::try_from(0x8126), Ok(Instruction::SHR(REG_1)))
+        assert_eq!(Instruction::try_from(0x8126), Ok(Instruction::SHR(REG_1)));
     }
 
     #[test]
@@ -442,12 +438,12 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x8127),
             Ok(Instruction::SUBN(REG_1, REG_2))
-        )
+        );
     }
 
     #[test]
     fn test_parsing_shl() {
-        assert_eq!(Instruction::try_from(0x812E), Ok(Instruction::SHL(REG_1)))
+        assert_eq!(Instruction::try_from(0x812E), Ok(Instruction::SHL(REG_1)));
     }
 
     #[test]
@@ -455,17 +451,17 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0x9120),
             Ok(Instruction::SNE_Reg(REG_1, REG_2))
-        )
+        );
     }
 
     #[test]
     fn test_parsing_ld_i() {
-        assert_eq!(Instruction::try_from(0xA200), Ok(Instruction::LD_I(ADDR)))
+        assert_eq!(Instruction::try_from(0xA200), Ok(Instruction::LD_I(ADDR)));
     }
 
     #[test]
     fn test_parsing_jp_v0() {
-        assert_eq!(Instruction::try_from(0xB200), Ok(Instruction::JP_V0(ADDR)))
+        assert_eq!(Instruction::try_from(0xB200), Ok(Instruction::JP_V0(ADDR)));
     }
 
     #[test]
@@ -473,7 +469,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0xC142),
             Ok(Instruction::RND(REG_1, 0x42))
-        )
+        );
     }
 
     #[test]
@@ -481,27 +477,27 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0xD123),
             Ok(Instruction::DRW(REG_1, REG_2, 0x3))
-        )
+        );
     }
 
     #[test]
     fn test_parsing_skp() {
-        assert_eq!(Instruction::try_from(0xE19E), Ok(Instruction::SKP(REG_1)))
+        assert_eq!(Instruction::try_from(0xE19E), Ok(Instruction::SKP(REG_1)));
     }
 
     #[test]
     fn test_parsing_sknp() {
-        assert_eq!(Instruction::try_from(0xE1A1), Ok(Instruction::SKNP(REG_1)))
+        assert_eq!(Instruction::try_from(0xE1A1), Ok(Instruction::SKNP(REG_1)));
     }
 
     #[test]
     fn test_parsing_ld_dt() {
-        assert_eq!(Instruction::try_from(0xF107), Ok(Instruction::LD_DT(REG_1)))
+        assert_eq!(Instruction::try_from(0xF107), Ok(Instruction::LD_DT(REG_1)));
     }
 
     #[test]
     fn test_parsing_ld_k() {
-        assert_eq!(Instruction::try_from(0xF10A), Ok(Instruction::LD_K(REG_1)))
+        assert_eq!(Instruction::try_from(0xF10A), Ok(Instruction::LD_K(REG_1)));
     }
 
     #[test]
@@ -509,7 +505,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0xF115),
             Ok(Instruction::SET_DT(REG_1))
-        )
+        );
     }
 
     #[test]
@@ -517,22 +513,22 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0xF118),
             Ok(Instruction::SET_ST(REG_1))
-        )
+        );
     }
 
     #[test]
     fn test_parsing_add_i() {
-        assert_eq!(Instruction::try_from(0xF11E), Ok(Instruction::ADD_I(REG_1)))
+        assert_eq!(Instruction::try_from(0xF11E), Ok(Instruction::ADD_I(REG_1)));
     }
 
     #[test]
     fn test_parsing_ld_f() {
-        assert_eq!(Instruction::try_from(0xF129), Ok(Instruction::LD_F(REG_1)))
+        assert_eq!(Instruction::try_from(0xF129), Ok(Instruction::LD_F(REG_1)));
     }
 
     #[test]
     fn test_parsing_ld_b() {
-        assert_eq!(Instruction::try_from(0xF133), Ok(Instruction::LD_B(REG_1)))
+        assert_eq!(Instruction::try_from(0xF133), Ok(Instruction::LD_B(REG_1)));
     }
 
     #[test]
@@ -540,7 +536,7 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0xF155),
             Ok(Instruction::LD_MEM_I(REG_1))
-        )
+        );
     }
 
     #[test]
@@ -548,6 +544,6 @@ mod tests {
         assert_eq!(
             Instruction::try_from(0xF165),
             Ok(Instruction::LD_I_MEM(REG_1))
-        )
+        );
     }
 }

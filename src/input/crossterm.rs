@@ -2,29 +2,51 @@ use std::{collections::HashMap, sync::LazyLock, time::Duration};
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent};
 
-use crate::{app::Action, keyboard::Ch8Key};
+use crate::{app::Action, input::InputManager, keyboard::Ch8Key};
 
-impl Action {
-    pub(crate) fn from_event(e: Event) -> Option<Action> {
+#[derive(Debug, Default)]
+pub(crate) struct CrosstermInputManager {}
+
+impl InputManager for CrosstermInputManager {
+    type Err = EventReadingError;
+
+    fn poll_events() -> std::result::Result<Vec<Action>, Self::Err> {
+        let mut actions = Vec::new();
+        while event::poll(Duration::ZERO).map_err(EventReadingError)? {
+            if let Some(action) = Self::read_event()? {
+                actions.push(action);
+            }
+        }
+        Ok(actions)
+    }
+
+    fn read_event() -> std::result::Result<Option<Action>, Self::Err> {
+        event::read()
+            .map(Self::action_from_event)
+            .map_err(EventReadingError)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("IO error: {0}")]
+pub struct EventReadingError(std::io::Error);
+
+impl CrosstermInputManager {
+    fn action_from_event(e: Event) -> Option<Action> {
         match e {
-            Event::Key(key_event) => handle_key_event(key_event),
+            Event::Key(key_event) => Self::handle_key_event(key_event),
             _ => None,
         }
     }
-}
 
-/// Blocks until an event is available and returns it
-pub(crate) fn read_event() -> Result<Event, EventReadingError> {
-    event::read().map_err(EventReadingError)
-}
-
-/// Non-blocking event polling
-pub(crate) fn poll_events() -> Result<Vec<Event>, EventReadingError> {
-    let mut events = Vec::new();
-    while event::poll(Duration::ZERO).map_err(EventReadingError)? {
-        events.push(read_event()?);
+    fn handle_key_event(event: KeyEvent) -> Option<Action> {
+        match Ch8Key::try_from(event.code) {
+            Ok(ch8_key) => Some(Action::Chip8KeyPress(ch8_key)),
+            Err(InputError::NotAVirtualKey(key_code)) => {
+                KEYBINDS.get(&key_code).map(|(action, _)| action.clone())
+            }
+        }
     }
-    Ok(events)
 }
 
 const QUIT: KeyCode = KeyCode::Char('q');
@@ -41,15 +63,6 @@ pub(crate) static KEYBINDS: LazyLock<HashMap<KeyCode, (Action, &'static str)>> =
             (RESET, (Action::Reset, "Reset the game")),
         ])
     });
-
-pub(crate) fn handle_key_event(event: KeyEvent) -> Option<Action> {
-    match Ch8Key::try_from(event.code) {
-        Ok(ch8_key) => Some(Action::Chip8KeyPress(ch8_key)),
-        Err(InputError::NotAVirtualKey(key_code)) => {
-            KEYBINDS.get(&key_code).map(|(action, _)| action.clone())
-        }
-    }
-}
 
 impl TryFrom<KeyCode> for Ch8Key {
     type Error = InputError;
@@ -82,7 +95,3 @@ pub enum InputError {
     #[error("{0} is not bound to the virtual keyboard")]
     NotAVirtualKey(KeyCode),
 }
-
-#[derive(Debug, thiserror::Error)]
-#[error("IO error: {0}")]
-pub struct EventReadingError(std::io::Error);

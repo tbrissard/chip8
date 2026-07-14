@@ -38,11 +38,11 @@ impl Ch8Keyboard {
     }
 
     pub(super) fn press_key(&mut self, key: Ch8Key) {
-        self[key] = KeyState::Down(Instant::now())
+        self[key] = KeyState::Down(Instant::now());
     }
 
     pub(crate) fn release_key(&mut self, key: Ch8Key) {
-        self[key] = KeyState::Up
+        self[key] = KeyState::Up;
     }
 
     /// Simulate the release of keys that have been pressed
