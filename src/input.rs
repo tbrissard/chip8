@@ -1,28 +1,30 @@
 use std::{collections::HashMap, sync::LazyLock, time::Duration};
 
-use ratatui::crossterm::event::{self, KeyCode, KeyEvent};
+use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent};
 
 use crate::{app::Action, keyboard::Ch8Key};
 
-/// Blocks until an event is available and returns it
-pub(crate) fn read_event() -> Result<Action, EventReadingError> {
-    loop {
-        // filter out unwanted events
-        if let event::Event::Key(key_event) = event::read().map_err(EventReadingError)?
-            && let Some(action) = handle_key_event(key_event)
-        {
-            return Ok(action);
+impl Action {
+    pub(crate) fn from_event(e: Event) -> Option<Action> {
+        match e {
+            Event::Key(key_event) => handle_key_event(key_event),
+            _ => None,
         }
     }
 }
 
+/// Blocks until an event is available and returns it
+pub(crate) fn read_event() -> Result<Event, EventReadingError> {
+    event::read().map_err(EventReadingError)
+}
+
 /// Non-blocking event polling
-pub(crate) fn poll_events() -> Result<Vec<Action>, EventReadingError> {
-    let mut actions = Vec::new();
+pub(crate) fn poll_events() -> Result<Vec<Event>, EventReadingError> {
+    let mut events = Vec::new();
     while event::poll(Duration::ZERO).map_err(EventReadingError)? {
-        actions.push(read_event()?);
+        events.push(read_event()?);
     }
-    Ok(actions)
+    Ok(events)
 }
 
 const QUIT: KeyCode = KeyCode::Char('q');

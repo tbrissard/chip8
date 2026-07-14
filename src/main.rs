@@ -37,9 +37,7 @@ fn main() {
             let mut app = App::default();
             let bytes = std::fs::read(rom).unwrap();
             app.load_rom(&bytes).unwrap();
-            if let Some(frequency) = clock_speed {
-                app.set_clock_speed(frequency);
-            }
+            clock_speed.inspect(|frequency| app.set_clock_speed(*frequency));
             ratatui::run(|terminal| app.run(terminal)).unwrap();
         }
     }

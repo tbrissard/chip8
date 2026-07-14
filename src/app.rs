@@ -5,9 +5,10 @@ use std::{
 
 use ratatui::DefaultTerminal;
 
+use crate::input::EventReadingError;
 use crate::{
     emulator::{CpuState, Emulator, Instruction, MemoryError, Registers, StepError},
-    input::{self, EventReadingError},
+    input::{self},
     keyboard::{Ch8Key, Ch8Keyboard},
     screen::StandardScreen,
     tui,
@@ -171,13 +172,16 @@ impl App {
 
     /// Blocks until next event is available and process it
     fn process_next_event(&mut self) -> RunResult<()> {
-        self.handle_action(&input::read_event()?);
+        Action::from_event(input::read_event()?).inspect(|a| self.handle_action(a));
         Ok(())
     }
 
     /// Process available events
     fn process_events(&mut self) -> RunResult<()> {
-        for action in input::poll_events()? {
+        for action in input::poll_events()?
+            .into_iter()
+            .filter_map(Action::from_event)
+        {
             self.handle_action(&action)
         }
         Ok(())
