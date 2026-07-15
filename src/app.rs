@@ -114,7 +114,6 @@ impl<T: InputManager> App<T> {
         self.emulator.resume();
         self.emulator_state = EmulatorState::Running(run_mode);
         self.next_emulator_cycle = Instant::now() + self.emulator_cycle_interval;
-        self.next_render = Instant::now() + self.render_interval;
         self.next_emulator_frame = Instant::now() + self.emulator_frame_interval;
     }
 
