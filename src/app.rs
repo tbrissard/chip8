@@ -42,7 +42,7 @@ enum RunMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum EmulatorState {
+pub(crate) enum EmulatorState {
     Running(RunMode),
     /// The execution is paused
     Paused,
@@ -61,18 +61,15 @@ pub(crate) struct App<T> {
     pub(crate) emulator: Emulator,
     input_manager: PhantomData<T>,
 
-    emulator_state: EmulatorState,
+    pub(crate) emulator_state: EmulatorState,
     initial_snapshot: Emulator,
 
-    emulator_tick_interval: Duration,
-    next_emulator_tick: Instant,
+    emulator_cycle_interval: Duration,
+    next_emulator_cycle: Instant,
     render_interval: Duration,
     next_render: Instant,
     emulator_frame_interval: Duration,
     next_emulator_frame: Instant,
-
-    emulator_uptime: Duration,
-    cycles_count: u32,
 }
 
 impl<T> Default for App<T> {
@@ -85,22 +82,19 @@ impl<T> Default for App<T> {
             emulator_state: EmulatorState::default(),
             initial_snapshot: Emulator::default(),
 
-            emulator_tick_interval: Duration::from_secs_f64(1.0 / DEFAULT_CLOCK_SPEED),
-            next_emulator_tick: Instant::now(),
+            emulator_cycle_interval: Duration::from_secs_f64(1.0 / DEFAULT_CLOCK_SPEED),
+            next_emulator_cycle: Instant::now(),
             render_interval: Duration::from_secs_f64(1.0 / FRAME_RATE),
             next_render: Instant::now(),
             emulator_frame_interval: Duration::from_secs_f64(1.0 / TIMER_TICK_RATE),
             next_emulator_frame: Instant::now(),
-
-            emulator_uptime: Duration::ZERO,
-            cycles_count: 0,
         }
     }
 }
 
 impl<T: InputManager> App<T> {
     pub fn set_clock_speed(&mut self, frequency: f64) {
-        self.emulator_tick_interval = Duration::from_secs_f64(1.0 / frequency);
+        self.emulator_cycle_interval = Duration::from_secs_f64(1.0 / frequency);
     }
 
     fn terminate(&mut self) {
@@ -108,34 +102,30 @@ impl<T: InputManager> App<T> {
     }
 
     fn reset(&mut self) {
-        self.set_emulator_state(self.initial_snapshot.clone());
+        self.change_emulator(self.initial_snapshot.clone());
     }
 
     fn pause(&mut self) {
         self.emulator_state = EmulatorState::Paused;
+        self.emulator.pause();
     }
 
-    fn resume(&mut self) {
-        self.emulator_state = EmulatorState::Running(RunMode::Standard);
-        self.next_emulator_tick = Instant::now() + self.emulator_tick_interval;
+    fn resume(&mut self, run_mode: RunMode) {
+        self.emulator.resume();
+        self.emulator_state = EmulatorState::Running(run_mode);
+        self.next_emulator_cycle = Instant::now() + self.emulator_cycle_interval;
         self.next_render = Instant::now() + self.render_interval;
         self.next_emulator_frame = Instant::now() + self.emulator_frame_interval;
     }
 
-    fn step(&mut self) {
-        self.emulator_state = EmulatorState::Running(RunMode::Step);
-    }
-
-    fn set_emulator_state(&mut self, emulator: Emulator) {
+    fn change_emulator(&mut self, emulator: Emulator) {
         self.emulator = emulator;
-        self.cycles_count = 0;
-        self.emulator_uptime = Duration::ZERO;
         self.history.clear();
     }
 
     pub fn load_rom(&mut self, bytes: &[u8]) -> Result<()> {
         let emu = Emulator::load_program(bytes).map_err(Chip8Error::ProgramLoadingFailed)?;
-        self.set_emulator_state(emu);
+        self.change_emulator(emu);
         self.initial_snapshot = self.emulator.clone();
         Ok(())
     }
@@ -147,10 +137,11 @@ impl<T: InputManager> App<T> {
             (Action::Reset, EmulatorState::Running(_) | EmulatorState::Paused) => self.reset(),
 
             (Action::TogglePause, EmulatorState::Running(_)) => self.pause(),
-            (Action::TogglePause, EmulatorState::Paused) => self.resume(),
+            (Action::TogglePause, EmulatorState::Paused) => self.resume(RunMode::Standard),
 
-            (Action::Step, EmulatorState::Running(RunMode::Standard) | EmulatorState::Paused) => {
-                self.step();
+            (Action::Step, EmulatorState::Running(RunMode::Standard)) => self.pause(),
+            (Action::Step, EmulatorState::Paused) => {
+                self.resume(RunMode::Step);
             }
 
             (Action::Chip8KeyPress(ch8_key), EmulatorState::Running(_)) => {
@@ -185,22 +176,19 @@ impl<T: InputManager> App<T> {
         loop {
             self.process_events()?;
 
-            match self.emulator_state {
-                EmulatorState::Terminated => break,
-                EmulatorState::Running(run_mode) => {
-                    self.run_emulator(self.next_render, run_mode)?;
-                    if run_mode == RunMode::Step {
-                        self.pause();
-                    }
-                }
-                EmulatorState::Paused => self.process_next_event()?,
-            }
-
             if Instant::now() > self.next_render {
                 terminal
                     .draw(|frame| tui::draw(self, frame))
                     .map_err(RunError::RenderFailed)?;
                 self.next_render += self.render_interval;
+            }
+
+            match self.emulator_state {
+                EmulatorState::Terminated => break,
+                EmulatorState::Running(run_mode) => {
+                    self.run_emulator(self.next_render, run_mode)?;
+                }
+                EmulatorState::Paused => self.process_next_event()?,
             }
         }
 
@@ -208,10 +196,14 @@ impl<T: InputManager> App<T> {
     }
 
     fn run_emulator(&mut self, until: Instant, mode: RunMode) -> RunResult<()> {
-        let emulator_start = Instant::now();
-
         loop {
-            if Instant::now() > self.next_emulator_tick
+            if Instant::now() > self.next_emulator_frame {
+                self.emulator.decrement_timers();
+                self.emulator.keyboard.release_keys();
+                self.next_emulator_frame += self.emulator_frame_interval;
+            }
+
+            if Instant::now() >= self.next_emulator_cycle
                 && self.emulator.cpu_state == CpuState::Executing
             {
                 let pc = self.emulator.registers.program_counter;
@@ -223,34 +215,27 @@ impl<T: InputManager> App<T> {
                 }
 
                 self.history.push(last_instr);
-                self.cycles_count += 1;
-                self.next_emulator_tick += self.emulator_tick_interval;
-            }
+                self.next_emulator_cycle += self.emulator_cycle_interval;
 
-            if Instant::now() > self.next_emulator_frame {
-                self.emulator.decrement_timers();
-                self.emulator.keyboard.release_keys();
-                self.next_emulator_frame += self.emulator_frame_interval;
-            }
-
-            if mode == RunMode::Step || Instant::now() > until {
-                break;
+                if mode == RunMode::Step {
+                    self.pause();
+                    break;
+                }
             }
 
             std::thread::sleep(
-                self.next_emulator_tick
+                self.next_emulator_cycle
                     .min(self.next_emulator_frame)
                     .min(until)
                     .saturating_duration_since(Instant::now()),
             );
+
+            if Instant::now() >= until {
+                break;
+            }
         }
 
-        self.emulator_uptime += Instant::now().saturating_duration_since(emulator_start);
         Ok(())
-    }
-
-    pub(crate) fn registers(&self) -> &Registers {
-        &self.emulator.registers
     }
 
     pub(crate) fn history(&self) -> &[Instruction] {

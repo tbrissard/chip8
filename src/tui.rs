@@ -11,7 +11,7 @@ use ratatui::{
 
 use crate::{
     app::App,
-    emulator::{Instruction, Registers},
+    emulator::{Emulator, Instruction},
     input::{self, InputManager},
     keyboard::{Ch8Key, Ch8Keyboard, KeyState},
     screen::StandardScreen,
@@ -41,7 +41,7 @@ pub(crate) fn draw<T: InputManager>(app: &App<T>, frame: &mut Frame) {
     );
     render_keybinds(second_column[1], buf);
     render_history(app.history(), layout[2], buf);
-    render_registers(app.registers(), layout[3], buf);
+    render_registers(app, layout[3], buf);
 }
 
 fn render_history(history: &[Instruction], area: Rect, buf: &mut Buffer) {
@@ -151,7 +151,9 @@ fn render_screen(screen: &StandardScreen, area: Rect, buf: &mut Buffer) {
         .render(layout[0], buf);
 }
 
-fn render_registers(registers: &Registers, area: Rect, buf: &mut Buffer) {
+fn render_registers<T: InputManager>(app: &App<T>, area: Rect, buf: &mut Buffer) {
+    let registers = &app.emulator.registers;
+
     let title = Line::from("Registers".bold());
     let block = Block::default()
         .borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT)
@@ -162,6 +164,9 @@ fn render_registers(registers: &Registers, area: Rect, buf: &mut Buffer) {
     let layout = Layout::horizontal(vec![Constraint::Length(8), Constraint::Length(22)])
         .spacing(3)
         .split(block_area);
+
+    let layout2 =
+        Layout::vertical(vec![Constraint::Fill(1), Constraint::Length(4)]).split(layout[1]);
 
     let v_registers = Text::from(
         registers
@@ -194,7 +199,14 @@ fn render_registers(registers: &Registers, area: Rect, buf: &mut Buffer) {
     );
     let others = Text::from(others);
 
+    let stats = Text::from(vec![
+        Line::from(format!("Uptime: {}ms", app.emulator.uptime.as_millis())),
+        Line::from(format!("Cycles count: {}", app.emulator.cycles)),
+        Line::from(format!("Emulator state: {:?}", app.emulator_state)),
+    ]);
+
     v_registers.render(layout[0], buf);
     others.render(layout[1], buf);
     block.render(area, buf);
+    stats.render(layout2[1], buf);
 }

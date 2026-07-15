@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use rand::{rngs::ThreadRng, RngExt};
 
 pub(crate) use crate::emulator::instruction::{Instruction, InstructionError};
@@ -33,6 +35,11 @@ pub struct Emulator {
 
     rng: ThreadRng,
     pub(crate) cpu_state: CpuState,
+
+    // self.emulator_uptime += Instant::now().saturating_duration_since(emulator_start);
+    pub(crate) uptime: Duration,
+    last_restart: Instant,
+    pub(crate) cycles: u16,
 }
 
 const START_ADDRESS: Address = 0x200;
@@ -52,6 +59,12 @@ impl Default for Emulator {
 
             rng: ThreadRng::default(),
             cpu_state: CpuState::default(),
+
+            /// Time spent running
+            uptime: Duration::ZERO,
+            last_restart: Instant::now(),
+            /// Number of instructions executed
+            cycles: 0,
         }
     }
 }
@@ -63,6 +76,18 @@ impl Emulator {
         Ok(cpu)
     }
 
+    pub(super) fn run(&mut self) {
+        self.last_restart = Instant::now();
+    }
+
+    pub(super) fn pause(&mut self) {
+        self.uptime += Instant::now().duration_since(self.last_restart);
+    }
+
+    pub(super) fn resume(&mut self) {
+        self.last_restart = Instant::now();
+    }
+
     /// Execute the next instruction and returns it
     pub(super) fn step(&mut self) -> Result<Instruction, StepError> {
         let instr = self.next_instr()?;
@@ -71,7 +96,8 @@ impl Emulator {
         Ok(instr)
     }
 
-    pub fn next_instr(&mut self) -> Result<Instruction, InstructionFetchError> {
+    /// Fetch the next instruction
+    fn next_instr(&mut self) -> Result<Instruction, InstructionFetchError> {
         let a = self.memory.read(self.registers.program_counter, 2)?;
         let a = <&[u8; 2]>::try_from(a).unwrap();
         let instr = std::convert::TryInto::<Instruction>::try_into(a)?;
@@ -79,99 +105,78 @@ impl Emulator {
         Ok(instr)
     }
 
-    pub fn execute(&mut self, instr: Instruction) -> Result<(), ExecutionError> {
+    /// Execute an instruction
+    fn execute(&mut self, instr: Instruction) -> Result<(), ExecutionError> {
         match instr {
             Instruction::CLS => self.screen.clear(),
-
             Instruction::RET => {
                 let addr = self.registers.pop_stack()?;
                 self.set_pc(addr);
             }
-
             Instruction::JP(addr) => self.set_pc(addr),
-
             Instruction::CALL(addr) => {
                 self.registers.push_stack(self.registers.program_counter)?;
                 self.set_pc(addr);
             }
-
             Instruction::SE_Value(vx, kk) => {
                 if self.registers.vreg(vx) == kk {
                     self.skip_instr();
                 }
             }
-
             Instruction::SNE(vx, kk) => {
                 if self.registers.vreg(vx) != kk {
                     self.skip_instr();
                 }
             }
-
             Instruction::SE_Reg(vx, vy) => {
                 if self.vreg(vx) == self.vreg(vy) {
                     self.skip_instr();
                 }
             }
-
             Instruction::LD(vx, kk) => self.set_vreg(vx, kk),
-
             Instruction::ADD(vx, kk) => self.set_vreg(vx, self.vreg(vx).wrapping_add(kk)),
-
             Instruction::LD_Regs(vx, vy) => self.set_vreg(vx, self.vreg(vy)),
-
             Instruction::OR(vx, vy) => self.set_vreg(vx, self.vreg(vx) | self.vreg(vy)),
-
             Instruction::AND(vx, vy) => self.set_vreg(vx, self.vreg(vx) & self.vreg(vy)),
-
             Instruction::XOR(vx, vy) => self.set_vreg(vx, self.vreg(vx) ^ self.vreg(vy)),
-
             Instruction::ADD_Reg(vx, vy) => {
                 let (res, carry) = self.vreg(vx).overflowing_add(self.vreg(vy));
                 self.set_vreg(vx, res);
                 self.set_f(carry.into());
             }
-
             Instruction::SUB(vx, vy) => {
                 let (res, carry) = self.vreg(vx).overflowing_sub(self.vreg(vy));
                 self.set_vreg(vx, res);
                 self.set_f((!carry).into());
             }
-
             Instruction::SHR(vx) => {
                 let value = self.vreg(vx);
                 self.set_f(value & 1);
                 self.set_vreg(vx, value >> 1);
             }
-
             Instruction::SUBN(vx, vy) => {
                 let (res, carry) = self.vreg(vy).overflowing_sub(self.vreg(vx));
                 self.set_vreg(vx, res);
                 self.set_f((!carry).into());
             }
-
             Instruction::SHL(vx) => {
                 let value = self.vreg(vx);
                 self.set_f(value & 1);
                 self.set_vreg(vx, value << 1);
             }
-
             Instruction::SNE_Reg(vx, vy) => {
                 if self.vreg(vx) != self.vreg(vy) {
                     self.skip_instr();
                 }
             }
-
             Instruction::LD_I(addr) => self.registers.i = addr,
-
             Instruction::JP_V0(addr) => {
                 self.set_pc(Address::from(self.vreg(VRegister::V0)) + addr);
             }
-
             Instruction::RND(vx, kk) => {
                 let rnd: u8 = self.rng.random();
                 self.set_vreg(vx, rnd & kk);
             }
-
             Instruction::DRW(vx, vy, n) => {
                 let sprite = self.memory.read(self.registers.i, Address::from(n))?.into();
                 let collision = self.screen.write_sprite(
@@ -181,31 +186,22 @@ impl Emulator {
                 );
                 self.set_f(collision.into());
             }
-
             Instruction::SKP(vx) => {
                 if self.keyboard.is_down(self.vreg(vx).try_into()?) {
                     self.skip_instr();
                 }
             }
-
             Instruction::SKNP(vx) => {
                 if self.keyboard.is_up(self.vreg(vx).try_into()?) {
                     self.skip_instr();
                 }
             }
-
             Instruction::LD_DT(vx) => self.set_vreg(vx, self.registers.delay_timer),
-
             Instruction::LD_K(vx) => self.cpu_state = CpuState::WaitingForKey(vx),
-
             Instruction::SET_DT(vx) => self.registers.delay_timer = self.vreg(vx),
-
             Instruction::SET_ST(vx) => self.registers.sound_timer = self.vreg(vx),
-
             Instruction::ADD_I(vx) => self.registers.i += Address::from(self.vreg(vx)),
-
             Instruction::LD_F(vx) => self.registers.i = memory::digit_addr(self.vreg(vx)),
-
             Instruction::LD_B(vx) => {
                 let value = self.vreg(vx);
                 self.memory.store(&[value / 100], self.registers.i)?;
@@ -213,7 +209,6 @@ impl Emulator {
                     .store(&[value % 100 / 10], self.registers.i + 1)?;
                 self.memory.store(&[value % 10], self.registers.i + 2)?;
             }
-
             Instruction::LD_MEM_I(vx) => {
                 for (value, addr) in self
                     .registers
@@ -225,7 +220,6 @@ impl Emulator {
                     self.memory.store(&[*value], addr)?;
                 }
             }
-
             Instruction::LD_I_MEM(vx) => {
                 for (reg, addr) in self
                     .registers
@@ -238,6 +232,8 @@ impl Emulator {
                 }
             }
         }
+
+        self.cycles += 1;
 
         Ok(())
     }
