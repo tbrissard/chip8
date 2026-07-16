@@ -167,6 +167,7 @@ impl Emulator {
         Ok(cpu)
     }
 
+    /// Poll available messages, non-blocking
     fn poll_messages(rx: &Receiver<EmulatorMessage>) -> Vec<EmulatorMessage> {
         let mut messages = Vec::new();
         loop {
@@ -181,6 +182,11 @@ impl Emulator {
         messages
     }
 
+    /// Read the next message, blocking
+    fn read_message(rx: &Receiver<EmulatorMessage>) -> EmulatorMessage {
+        rx.recv().unwrap()
+    }
+
     fn update_shared_states(&mut self) {
         let shared = &mut self.shared.lock().unwrap();
         shared.screen = self.screen.clone();
@@ -192,44 +198,52 @@ impl Emulator {
     pub(super) fn run(&mut self, rx: Receiver<EmulatorMessage>) {
         self.stats.last_restart = Instant::now();
 
-        while self.state != EmulatorState::Stopped {
+        loop {
             let messages = Self::poll_messages(&rx);
             for msg in messages {
                 self.handle_message(msg);
             }
 
-            if let EmulatorState::Running(run_mode) = self.state {
-                if Instant::now() > self.next_timer_tick {
-                    self.regs.delay_timer = self.regs.delay_timer.saturating_sub(1);
-                    self.regs.sound_timer = self.regs.sound_timer.saturating_sub(1);
-                    self.keyboard.release_keys();
-                    self.next_timer_tick += self.timer_tick_interval;
-                }
+            match self.state {
+                EmulatorState::Running(run_mode) => {
+                    thread::sleep(
+                        self.next_cycle
+                            .min(self.next_timer_tick)
+                            .saturating_duration_since(Instant::now()),
+                    );
 
-                if Instant::now() >= self.next_cycle && self.cpu_mode == CpuMode::Active {
-                    let pc = self.regs.pc;
-                    let last_instr = self.step().unwrap();
-                    if self.regs.pc == pc {
-                        // execution address has not changed, the program has entered a dead state
-                        self.stop();
-                        break;
+                    if Instant::now() > self.next_timer_tick {
+                        self.regs.delay_timer = self.regs.delay_timer.saturating_sub(1);
+                        self.regs.sound_timer = self.regs.sound_timer.saturating_sub(1);
+                        self.keyboard.release_keys();
+                        self.next_timer_tick += self.timer_tick_interval;
                     }
 
-                    self.history.push(last_instr);
-                    self.stats.cycles += 1;
-                    self.next_cycle += self.cycle_interval;
+                    if Instant::now() >= self.next_cycle && self.cpu_mode == CpuMode::Active {
+                        let pc = self.regs.pc;
+                        let last_instr = self.step().unwrap();
+                        if self.regs.pc == pc {
+                            // execution address has not changed, the program has entered a dead state
+                            self.stop();
+                            break;
+                        }
 
-                    if run_mode == RunMode::Debug {
-                        self.pause();
-                        break;
+                        self.history.push(last_instr);
+                        self.stats.cycles += 1;
+                        self.next_cycle += self.cycle_interval;
+
+                        if run_mode == RunMode::Debug {
+                            self.pause();
+                        }
                     }
                 }
 
-                thread::sleep(
-                    self.next_cycle
-                        .min(self.next_timer_tick)
-                        .saturating_duration_since(Instant::now()),
-                );
+                EmulatorState::Paused => {
+                    let msg = Self::read_message(&rx);
+                    self.handle_message(msg);
+                }
+
+                EmulatorState::Stopped => break,
             }
         }
     }
