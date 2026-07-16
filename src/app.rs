@@ -107,6 +107,7 @@ impl<T: InputManager> App<T> {
                     .draw(|frame| tui::draw(&shared, frame))
                     .map_err(RunError::RenderFailed)?;
                 self.next_render += self.render_interval;
+                tx.send(EmulatorMessage::RefreshSharedStates).unwrap();
             }
 
             if self.state == AppState::Terminating {
@@ -114,6 +115,8 @@ impl<T: InputManager> App<T> {
                 handle.join().unwrap();
                 break;
             }
+
+            thread::sleep(self.next_render.saturating_duration_since(Instant::now()));
         }
 
         Ok(())

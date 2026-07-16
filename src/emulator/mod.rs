@@ -1,5 +1,6 @@
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use rand::RngExt;
@@ -32,6 +33,8 @@ pub(crate) enum EmulatorMessage {
     KeyPress(Ch8Key),
     // /// Change the clock speed
     // _ChangeClockSpeed(f64),
+    /// Asks the emulator to refresh the shared states
+    RefreshSharedStates,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -66,7 +69,7 @@ pub(crate) enum CpuMode {
     WaitingForKey(VRegister),
 }
 
-/// Holds shared states needed by UI for granular locking
+/// States buffer read by UI
 #[derive(Debug, Default)]
 pub(crate) struct Shared {
     pub(crate) screen: StandardScreen,
@@ -75,8 +78,10 @@ pub(crate) struct Shared {
 
 #[derive(Debug, Clone)]
 pub struct Emulator {
-    pub(crate) registers: Registers,
+    registers: Registers,
     memory: Memory,
+    screen: StandardScreen,
+    keyboard: Ch8Keyboard,
 
     pub(super) shared: Arc<Mutex<Shared>>,
     state: EmulatorState,
@@ -114,6 +119,8 @@ impl Default for Emulator {
         Self {
             registers,
             memory: Memory::default(),
+            screen: StandardScreen::default(),
+            keyboard: Ch8Keyboard::default(),
 
             shared: Arc::new(Mutex::new(Shared {
                 screen: StandardScreen::default(),
@@ -157,6 +164,12 @@ impl Emulator {
         messages
     }
 
+    fn update_shared_states(&mut self) {
+        let shared = &mut self.shared.lock().unwrap();
+        shared.screen = self.screen.clone();
+        shared.keyboard = self.keyboard.clone();
+    }
+
     pub(super) fn run(&mut self, rx: Receiver<EmulatorMessage>) {
         self.last_restart = Instant::now();
 
@@ -169,7 +182,7 @@ impl Emulator {
             if let EmulatorState::Running(run_mode) = self.state {
                 if Instant::now() > self.next_timer_tick {
                     self.decrement_timers();
-                    self.shared.lock().unwrap().keyboard.release_keys();
+                    self.keyboard.release_keys();
                     self.next_timer_tick += self.timer_tick_interval;
                 }
 
@@ -192,7 +205,7 @@ impl Emulator {
                     }
                 }
 
-                std::thread::sleep(
+                thread::sleep(
                     self.next_cycle
                         .min(self.next_timer_tick)
                         .saturating_duration_since(Instant::now()),
@@ -213,6 +226,10 @@ impl Emulator {
 
             (EmulatorMessage::KeyPress(ch8_key), EmulatorState::Running(_)) => {
                 self.press_key(ch8_key)
+            }
+
+            (EmulatorMessage::RefreshSharedStates, EmulatorState::Running(_)) => {
+                self.update_shared_states()
             }
 
             (_, _) => {}
@@ -246,7 +263,7 @@ impl Emulator {
     }
 
     fn press_key(&mut self, key: Ch8Key) {
-        self.shared.lock().unwrap().keyboard.press_key(key);
+        self.keyboard.press_key(key);
         if let CpuMode::WaitingForKey(vx) = self.cpu_mode {
             self.set_vreg(vx, Into::<u8>::into(key));
             self.cpu_mode = CpuMode::Active;
@@ -273,7 +290,7 @@ impl Emulator {
     /// Execute an instruction
     fn execute(&mut self, instr: Instruction) -> Result<(), ExecutionError> {
         match instr {
-            Instruction::CLS => self.shared.lock().unwrap().screen.clear(),
+            Instruction::CLS => self.screen.clear(),
             Instruction::RET => {
                 let addr = self.registers.pop_stack()?;
                 self.set_pc(addr);
@@ -345,7 +362,7 @@ impl Emulator {
             }
             Instruction::DRW(vx, vy, n) => {
                 let sprite = self.memory.read(self.registers.i, Address::from(n))?.into();
-                let collision = self.shared.lock().unwrap().screen.write_sprite(
+                let collision = self.screen.write_sprite(
                     &sprite,
                     self.vreg(vx) as usize,
                     self.vreg(vy) as usize,
@@ -353,24 +370,12 @@ impl Emulator {
                 self.set_f(collision.into());
             }
             Instruction::SKP(vx) => {
-                if self
-                    .shared
-                    .lock()
-                    .unwrap()
-                    .keyboard
-                    .is_down(self.vreg(vx).try_into()?)
-                {
+                if self.keyboard.is_down(self.vreg(vx).try_into()?) {
                     self.skip_instr();
                 }
             }
             Instruction::SKNP(vx) => {
-                if self
-                    .shared
-                    .lock()
-                    .unwrap()
-                    .keyboard
-                    .is_up(self.vreg(vx).try_into()?)
-                {
+                if self.keyboard.is_up(self.vreg(vx).try_into()?) {
                     self.skip_instr();
                 }
             }
