@@ -12,7 +12,7 @@ use ratatui::{
 };
 
 use crate::{
-    emulator::{Instruction, Shared},
+    emulator::{Instruction, Registers, Shared, Stats},
     input::{self, InputManager},
     keyboard::{Ch8Key, Ch8Keyboard, KeyState},
     screen::StandardScreen,
@@ -43,7 +43,7 @@ pub(crate) fn draw(shared: &Arc<Mutex<Shared>>, frame: &mut Frame) {
     );
     // render_keybinds(second_column[1], buf);
     // render_history(app.history(), layout[2], buf);
-    // render_registers(app, layout[3], buf);
+    render_registers(&shared.registers, &shared.stats, layout[3], buf);
 }
 
 fn render_history(history: &[Instruction], area: Rect, buf: &mut Buffer) {
@@ -153,62 +153,56 @@ fn render_screen(screen: &StandardScreen, area: Rect, buf: &mut Buffer) {
         .render(layout[0], buf);
 }
 
-// fn render_registers<T: InputManager>(app: &App<T>, area: Rect, buf: &mut Buffer) {
-//     let registers = &app.emulator.registers;
+fn render_registers(registers: &Registers, stats: &Stats, area: Rect, buf: &mut Buffer) {
+    let title = Line::from("Registers".bold());
+    let block = Block::default()
+        .borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT)
+        .title(title.centered())
+        .border_set(border::THICK);
+    let block_area = block.inner(area);
 
-//     let title = Line::from("Registers".bold());
-//     let block = Block::default()
-//         .borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT)
-//         .title(title.centered())
-//         .border_set(border::THICK);
-//     let block_area = block.inner(area);
+    let layout = Layout::horizontal(vec![Constraint::Length(8), Constraint::Length(22)])
+        .spacing(3)
+        .split(block_area);
 
-//     let layout = Layout::horizontal(vec![Constraint::Length(8), Constraint::Length(22)])
-//         .spacing(3)
-//         .split(block_area);
+    let layout2 =
+        Layout::vertical(vec![Constraint::Fill(1), Constraint::Length(4)]).split(layout[1]);
 
-//     let layout2 =
-//         Layout::vertical(vec![Constraint::Fill(1), Constraint::Length(4)]).split(layout[1]);
+    let v_registers = Text::from(
+        registers
+            .values
+            .iter()
+            .enumerate()
+            .map(|(i, vreg)| Line::from(format!("V{i:2}: {vreg:3}")))
+            .collect::<Vec<_>>(),
+    )
+    .centered();
 
-//     let v_registers = Text::from(
-//         registers
-//             .values
-//             .iter()
-//             .enumerate()
-//             .map(|(i, vreg)| Line::from(format!("V{i:2}: {vreg:3}")))
-//             .collect::<Vec<_>>(),
-//     )
-//     .centered();
+    let mut others = vec![
+        Line::from(format!("Program Counter: {:#05X}", registers.pc)),
+        Line::from(format!("I: {:#05X}", registers.i)),
+        Line::from(""),
+        Line::from(format!("Delay Timer: {}", registers.delay_timer)),
+        Line::from(format!("Sound Timer: {}", registers.sound_timer)),
+        Line::from(""),
+        Line::from(format!("Stack Pointer: {}", registers.stack_pointer)),
+    ];
+    others.extend(
+        registers
+            .stack
+            .iter()
+            .map(|addr| format!("{addr:#X}"))
+            .map(Line::from),
+    );
+    let others = Text::from(others);
 
-//     let mut others = vec![
-//         Line::from(format!(
-//             "Program Counter: {:#05X}",
-//             registers.program_counter
-//         )),
-//         Line::from(format!("I: {:#05X}", registers.i)),
-//         Line::from(""),
-//         Line::from(format!("Delay Timer: {}", registers.delay_timer)),
-//         Line::from(format!("Sound Timer: {}", registers.sound_timer)),
-//         Line::from(""),
-//         Line::from(format!("Stack Pointer: {}", registers.stack_pointer)),
-//     ];
-//     others.extend(
-//         registers
-//             .stack
-//             .iter()
-//             .map(|addr| format!("{addr:#X}"))
-//             .map(Line::from),
-//     );
-//     let others = Text::from(others);
+    let stats = Text::from(vec![
+        Line::from(format!("Uptime: {}ms", stats.uptime.as_millis())),
+        Line::from(format!("Cycles count: {}", stats.cycles)),
+    ]);
 
-//     let stats = Text::from(vec![
-//         Line::from(format!("Uptime: {}ms", app.emulator.uptime.as_millis())),
-//         Line::from(format!("Cycles count: {}", app.emulator.cycles)),
-//         Line::from(format!("Emulator state: {:?}", app.emulator_state)),
-//     ]);
-
-//     v_registers.render(layout[0], buf);
-//     others.render(layout[1], buf);
-//     block.render(area, buf);
-//     stats.render(layout2[1], buf);
-// }
+    v_registers.render(layout[0], buf);
+    others.render(layout[1], buf);
+    block.render(area, buf);
+    stats.render(layout2[1], buf);
+}

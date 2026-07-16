@@ -74,11 +74,35 @@ pub(crate) enum CpuMode {
 pub(crate) struct Shared {
     pub(crate) screen: StandardScreen,
     pub(crate) keyboard: Ch8Keyboard,
+    pub(crate) registers: Registers,
+    pub(crate) stats: Stats,
+}
+
+/// Useful stats
+#[derive(Debug, Clone)]
+pub(crate) struct Stats {
+    /// Time spent running
+    pub(crate) uptime: Duration,
+    pub(crate) last_restart: Instant,
+    pub(crate) last_pause: Option<Instant>,
+    /// Number of instructions executed
+    pub(crate) cycles: u16,
+}
+
+impl Default for Stats {
+    fn default() -> Self {
+        Self {
+            uptime: Duration::ZERO,
+            last_restart: Instant::now(),
+            last_pause: None,
+            cycles: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Emulator {
-    registers: Registers,
+    regs: Registers,
     memory: Memory,
     screen: StandardScreen,
     keyboard: Ch8Keyboard,
@@ -94,13 +118,7 @@ pub struct Emulator {
 
     /// Executed instructions
     pub(crate) history: Vec<Instruction>,
-    // self.emulator_uptime += Instant::now().saturating_duration_since(emulator_start);
-    /// Time spent running
-    pub(crate) uptime: Duration,
-    last_restart: Instant,
-    last_pause: Option<Instant>,
-    /// Number of instructions executed
-    pub(crate) cycles: u16,
+    stats: Stats,
 }
 
 const TIMER_TICK_RATE: f64 = 60.0;
@@ -110,14 +128,14 @@ const START_ADDRESS: Address = 0x200;
 impl Default for Emulator {
     fn default() -> Self {
         let registers = Registers {
-            program_counter: START_ADDRESS,
+            pc: START_ADDRESS,
             ..Default::default()
         };
 
         let now = Instant::now();
 
         Self {
-            registers,
+            regs: registers.clone(),
             memory: Memory::default(),
             screen: StandardScreen::default(),
             keyboard: Ch8Keyboard::default(),
@@ -125,6 +143,8 @@ impl Default for Emulator {
             shared: Arc::new(Mutex::new(Shared {
                 screen: StandardScreen::default(),
                 keyboard: Ch8Keyboard::default(),
+                registers,
+                stats: Stats::default(),
             })),
             state: EmulatorState::Running(RunMode::Standard),
             cpu_mode: CpuMode::default(),
@@ -135,10 +155,7 @@ impl Default for Emulator {
             next_timer_tick: now,
 
             history: Vec::new(),
-            uptime: Duration::ZERO,
-            last_restart: now,
-            last_pause: None,
-            cycles: 0,
+            stats: Stats::default(),
         }
     }
 }
@@ -168,10 +185,12 @@ impl Emulator {
         let shared = &mut self.shared.lock().unwrap();
         shared.screen = self.screen.clone();
         shared.keyboard = self.keyboard.clone();
+        shared.registers = self.regs.clone();
+        shared.stats = self.stats.clone();
     }
 
     pub(super) fn run(&mut self, rx: Receiver<EmulatorMessage>) {
-        self.last_restart = Instant::now();
+        self.stats.last_restart = Instant::now();
 
         while self.state != EmulatorState::Stopped {
             let messages = Self::poll_messages(&rx);
@@ -181,22 +200,23 @@ impl Emulator {
 
             if let EmulatorState::Running(run_mode) = self.state {
                 if Instant::now() > self.next_timer_tick {
-                    self.decrement_timers();
+                    self.regs.delay_timer = self.regs.delay_timer.saturating_sub(1);
+                    self.regs.sound_timer = self.regs.sound_timer.saturating_sub(1);
                     self.keyboard.release_keys();
                     self.next_timer_tick += self.timer_tick_interval;
                 }
 
                 if Instant::now() >= self.next_cycle && self.cpu_mode == CpuMode::Active {
-                    let pc = self.registers.program_counter;
+                    let pc = self.regs.pc;
                     let last_instr = self.step().unwrap();
-                    if self.registers.program_counter == pc {
+                    if self.regs.pc == pc {
                         // execution address has not changed, the program has entered a dead state
                         self.stop();
                         break;
                     }
 
                     self.history.push(last_instr);
-                    self.cycles += 1;
+                    self.stats.cycles += 1;
                     self.next_cycle += self.cycle_interval;
 
                     if run_mode == RunMode::Debug {
@@ -243,8 +263,8 @@ impl Emulator {
     /// Pause the emulator's execution
     fn pause(&mut self) {
         let now = Instant::now();
-        self.last_pause = Some(now);
-        self.uptime += now.duration_since(self.last_restart);
+        self.stats.last_pause = Some(now);
+        self.stats.uptime += now.duration_since(self.stats.last_restart);
         self.state = EmulatorState::Paused;
     }
 
@@ -252,13 +272,14 @@ impl Emulator {
     fn resume(&mut self, run_mode: RunMode) {
         let now = Instant::now();
         let pause_duration = now.duration_since(
-            self.last_pause
+            self.stats
+                .last_pause
                 .take()
                 .expect("emulator was not paused properly (missing last_pause)"),
         );
         self.next_cycle += pause_duration;
         self.next_timer_tick += pause_duration;
-        self.last_restart = now;
+        self.stats.last_restart = now;
         self.state = EmulatorState::Running(run_mode);
     }
 
@@ -272,10 +293,10 @@ impl Emulator {
 
     /// Fetch the next instruction
     fn next_instr(&mut self) -> Result<Instruction, InstructionFetchError> {
-        let a = self.memory.read(self.registers.program_counter, 2)?;
+        let a = self.memory.read(self.regs.pc, 2)?;
         let a = <&[u8; 2]>::try_from(a).unwrap();
         let instr = std::convert::TryInto::<Instruction>::try_into(a)?;
-        self.registers.program_counter += 2;
+        self.advance_pc();
         Ok(instr)
     }
 
@@ -292,27 +313,27 @@ impl Emulator {
         match instr {
             Instruction::CLS => self.screen.clear(),
             Instruction::RET => {
-                let addr = self.registers.pop_stack()?;
+                let addr = self.regs.pop_stack()?;
                 self.set_pc(addr);
             }
             Instruction::JP(addr) => self.set_pc(addr),
             Instruction::CALL(addr) => {
-                self.registers.push_stack(self.registers.program_counter)?;
+                self.regs.push_stack(self.regs.pc)?;
                 self.set_pc(addr);
             }
             Instruction::SE_Value(vx, kk) => {
-                if self.registers.vreg(vx) == kk {
-                    self.skip_instr();
+                if self.regs.vreg(vx) == kk {
+                    self.advance_pc();
                 }
             }
             Instruction::SNE(vx, kk) => {
-                if self.registers.vreg(vx) != kk {
-                    self.skip_instr();
+                if self.regs.vreg(vx) != kk {
+                    self.advance_pc();
                 }
             }
             Instruction::SE_Reg(vx, vy) => {
                 if self.vreg(vx) == self.vreg(vy) {
-                    self.skip_instr();
+                    self.advance_pc();
                 }
             }
             Instruction::LD(vx, kk) => self.set_vreg(vx, kk),
@@ -348,10 +369,10 @@ impl Emulator {
             }
             Instruction::SNE_Reg(vx, vy) => {
                 if self.vreg(vx) != self.vreg(vy) {
-                    self.skip_instr();
+                    self.advance_pc();
                 }
             }
-            Instruction::LD_I(addr) => self.registers.i = addr,
+            Instruction::LD_I(addr) => self.regs.i = addr,
             Instruction::JP_V0(addr) => {
                 self.set_pc(Address::from(self.vreg(VRegister::V0)) + addr);
             }
@@ -361,7 +382,7 @@ impl Emulator {
                 self.set_vreg(vx, rnd & kk);
             }
             Instruction::DRW(vx, vy, n) => {
-                let sprite = self.memory.read(self.registers.i, Address::from(n))?.into();
+                let sprite = self.memory.read(self.regs.i, Address::from(n))?.into();
                 let collision = self.screen.write_sprite(
                     &sprite,
                     self.vreg(vx) as usize,
@@ -371,45 +392,44 @@ impl Emulator {
             }
             Instruction::SKP(vx) => {
                 if self.keyboard.is_down(self.vreg(vx).try_into()?) {
-                    self.skip_instr();
+                    self.advance_pc();
                 }
             }
             Instruction::SKNP(vx) => {
                 if self.keyboard.is_up(self.vreg(vx).try_into()?) {
-                    self.skip_instr();
+                    self.advance_pc();
                 }
             }
-            Instruction::LD_DT(vx) => self.set_vreg(vx, self.registers.delay_timer),
+            Instruction::LD_DT(vx) => self.set_vreg(vx, self.regs.delay_timer),
             Instruction::LD_K(vx) => self.cpu_mode = CpuMode::WaitingForKey(vx),
-            Instruction::SET_DT(vx) => self.registers.delay_timer = self.vreg(vx),
-            Instruction::SET_ST(vx) => self.registers.sound_timer = self.vreg(vx),
-            Instruction::ADD_I(vx) => self.registers.i += Address::from(self.vreg(vx)),
-            Instruction::LD_F(vx) => self.registers.i = memory::digit_addr(self.vreg(vx)),
+            Instruction::SET_DT(vx) => self.regs.delay_timer = self.vreg(vx),
+            Instruction::SET_ST(vx) => self.regs.sound_timer = self.vreg(vx),
+            Instruction::ADD_I(vx) => self.regs.i += Address::from(self.vreg(vx)),
+            Instruction::LD_F(vx) => self.regs.i = memory::digit_addr(self.vreg(vx)),
             Instruction::LD_B(vx) => {
                 let value = self.vreg(vx);
-                self.memory.store(&[value / 100], self.registers.i)?;
-                self.memory
-                    .store(&[value % 100 / 10], self.registers.i + 1)?;
-                self.memory.store(&[value % 10], self.registers.i + 2)?;
+                self.memory.store(&[value / 100], self.regs.i)?;
+                self.memory.store(&[value % 100 / 10], self.regs.i + 1)?;
+                self.memory.store(&[value % 10], self.regs.i + 2)?;
             }
             Instruction::LD_MEM_I(vx) => {
                 for (value, addr) in self
-                    .registers
+                    .regs
                     .values
                     .iter()
                     .take(vx as usize + 1)
-                    .zip(self.registers.i..)
+                    .zip(self.regs.i..)
                 {
                     self.memory.store(&[*value], addr)?;
                 }
             }
             Instruction::LD_I_MEM(vx) => {
                 for (reg, addr) in self
-                    .registers
+                    .regs
                     .values
                     .iter_mut()
                     .take(vx as usize + 1)
-                    .zip(self.registers.i..)
+                    .zip(self.regs.i..)
                 {
                     *reg = self.memory.read(addr, 1)?[0];
                 }
@@ -419,29 +439,27 @@ impl Emulator {
         Ok(())
     }
 
-    fn skip_instr(&mut self) {
-        self.registers.program_counter += 2;
+    /// Advance the program counter to the next instruction
+    fn advance_pc(&mut self) {
+        self.regs.pc += 2;
     }
 
-    fn vreg(&self, vreg: VRegister) -> ValueRegister {
-        self.registers.vreg(vreg)
+    /// Set the program counter to an arbitrary address
+    fn set_pc(&mut self, addr: Address) {
+        self.regs.pc = addr;
     }
 
-    pub(crate) fn set_vreg(&mut self, vreg: VRegister, value: ValueRegister) {
-        self.registers.set_vreg(vreg, value);
-    }
-
+    /// Set the VF register
     fn set_f(&mut self, value: ValueRegister) {
         self.set_vreg(VRegister::VF, value);
     }
 
-    fn set_pc(&mut self, addr: Address) {
-        self.registers.program_counter = addr;
+    fn vreg(&self, vreg: VRegister) -> ValueRegister {
+        self.regs.vreg(vreg)
     }
 
-    pub(crate) fn decrement_timers(&mut self) {
-        self.registers.delay_timer = self.registers.delay_timer.saturating_sub(1);
-        self.registers.sound_timer = self.registers.sound_timer.saturating_sub(1);
+    pub(crate) fn set_vreg(&mut self, vreg: VRegister, value: ValueRegister) {
+        self.regs.set_vreg(vreg, value);
     }
 }
 
@@ -493,18 +511,18 @@ mod tests {
 
         let res = int.execute(Instruction::JP(ADDR));
         assert!(res.is_ok());
-        assert_eq!(int.registers.program_counter, ADDR);
+        assert_eq!(int.regs.pc, ADDR);
     }
 
     #[test]
     fn instruction_call() {
         let mut int = create_cpu();
 
-        let pc = int.registers.program_counter;
+        let pc = int.regs.pc;
 
         int.execute(Instruction::CALL(ADDR)).unwrap();
-        assert_eq!(pc, int.registers._top_stack().unwrap());
-        assert_eq!(int.registers.program_counter, ADDR);
+        assert_eq!(pc, int.regs._top_stack().unwrap());
+        assert_eq!(int.regs.pc, ADDR);
     }
 
     #[test]
@@ -512,13 +530,13 @@ mod tests {
         let mut int = create_cpu();
 
         int.set_vreg(REG_1, 1);
-        let pc = int.registers.program_counter;
+        let pc = int.regs.pc;
         int.execute(Instruction::SE_Value(REG_1, 1)).unwrap();
-        assert_eq!(int.registers.program_counter, pc + 2);
+        assert_eq!(int.regs.pc, pc + 2);
 
-        let pc = int.registers.program_counter;
+        let pc = int.regs.pc;
         int.execute(Instruction::SE_Value(REG_1, 2)).unwrap();
-        assert_ne!(int.registers.program_counter, pc + 2);
+        assert_ne!(int.regs.pc, pc + 2);
     }
 
     #[test]
@@ -526,41 +544,28 @@ mod tests {
         let mut int = create_cpu();
 
         int.set_vreg(REG_1, 0);
-        let pc = int.registers.program_counter;
+        let pc = int.regs.pc;
         int.execute(Instruction::SNE(REG_1, 1)).unwrap();
-        assert_eq!(int.registers.program_counter, pc + 2);
+        assert_eq!(int.regs.pc, pc + 2);
 
-        let pc = int.registers.program_counter;
+        let pc = int.regs.pc;
         int.execute(Instruction::SNE(REG_1, 0)).unwrap();
-        assert_ne!(int.registers.program_counter, pc + 2);
+        assert_ne!(int.regs.pc, pc + 2);
     }
 
     #[test]
     fn instruction_se_reg() {
         let mut int = create_cpu();
 
-        let pc = int.registers.program_counter;
+        let pc = int.regs.pc;
         int.set_vreg(REG_1, 1);
         int.set_vreg(REG_2, 1);
         int.execute(Instruction::SE_Reg(REG_1, REG_2)).unwrap();
-        assert_eq!(int.registers.program_counter, pc + 2);
+        assert_eq!(int.regs.pc, pc + 2);
 
-        let pc = int.registers.program_counter;
+        let pc = int.regs.pc;
         int.set_vreg(REG_2, 2);
         int.execute(Instruction::SE_Reg(REG_1, REG_2)).unwrap();
-        assert_ne!(int.registers.program_counter, pc + 2);
-    }
-
-    #[test]
-    fn timers_underflow() {
-        let mut cpu = create_cpu();
-
-        assert_eq!(cpu.registers.delay_timer, 0);
-        assert_eq!(cpu.registers.sound_timer, 0);
-
-        cpu.decrement_timers();
-
-        assert_eq!(cpu.registers.delay_timer, 0);
-        assert_eq!(cpu.registers.sound_timer, 0);
+        assert_ne!(int.regs.pc, pc + 2);
     }
 }
