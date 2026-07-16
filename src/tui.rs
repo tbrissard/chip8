@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use ratatui::{
     Frame,
     buffer::Buffer,
@@ -17,7 +19,7 @@ use crate::{
     screen::StandardScreen,
 };
 
-pub(crate) fn draw<T: InputManager>(app: &App<T>, frame: &mut Frame) {
+pub(crate) fn draw(screen: &Arc<Mutex<StandardScreen>>, frame: &mut Frame) {
     let layout = Layout::horizontal(vec![
         Constraint::Length(StandardScreen::WIDTH as u16 + 2),
         Constraint::Min(29),
@@ -33,8 +35,7 @@ pub(crate) fn draw<T: InputManager>(app: &App<T>, frame: &mut Frame) {
     .split(layout[1]);
 
     let buf = frame.buffer_mut();
-    let screen = &app.emulator.lock().unwrap().screen;
-    render_screen(screen, layout[0], buf);
+    render_screen(&screen.lock().unwrap(), layout[0], buf);
     // render_keyboard(
     //     app.keyboard(),
     //     second_column[0].centered_horizontally(Constraint::Length(29)),

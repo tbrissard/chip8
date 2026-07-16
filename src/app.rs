@@ -13,6 +13,7 @@ use ratatui::DefaultTerminal;
 use crate::{
     emulator::{Emulator, EmulatorMessage, MemoryError, StepError},
     input::InputManager,
+    screen::StandardScreen,
     tui,
 };
 
@@ -38,7 +39,6 @@ enum AppState {
 #[derive(Debug)]
 pub(crate) struct App<T> {
     state: AppState,
-    pub(crate) emulator: Arc<Mutex<Emulator>>,
     input_manager: PhantomData<T>,
 
     initial_snapshot: Emulator,
@@ -51,7 +51,6 @@ impl<T> Default for App<T> {
     fn default() -> Self {
         Self {
             state: AppState::default(),
-            emulator: Arc::new(Mutex::new(Emulator::default())),
             input_manager: PhantomData,
 
             initial_snapshot: Emulator::default(),
@@ -63,9 +62,9 @@ impl<T> Default for App<T> {
 }
 
 impl<T: InputManager> App<T> {
-    pub fn set_clock_speed(&mut self, frequency: f64) {
-        self.emulator.lock().unwrap().cycle_interval = Duration::from_secs_f64(1.0 / frequency);
-    }
+    // pub fn set_clock_speed(&mut self, frequency: f64) {
+    //     self.emulator.lock().unwrap().cycle_interval = Duration::from_secs_f64(1.0 / frequency);
+    // }
 
     // fn reset(&mut self) {
     //     self.change_emulator(self.initial_snapshot.clone());
@@ -74,13 +73,6 @@ impl<T: InputManager> App<T> {
     // fn change_emulator(&mut self, emulator: Emulator) {
     //     self.emulator = emulator;
     // }
-
-    pub fn load_rom(&mut self, bytes: &[u8]) -> Result<()> {
-        let emu = Emulator::load_program(bytes).map_err(Chip8Error::ProgramLoadingFailed)?;
-        self.initial_snapshot = emu.clone();
-        self.emulator = Arc::new(Mutex::new(emu));
-        Ok(())
-    }
 
     pub(crate) fn handle_action(
         &mut self,
@@ -103,17 +95,20 @@ impl<T: InputManager> App<T> {
         Ok(())
     }
 
-    pub(crate) fn run(&mut self, terminal: &mut DefaultTerminal) -> RunResult<()> {
+    pub(crate) fn run(&mut self, terminal: &mut DefaultTerminal, rom: &[u8]) -> RunResult<()> {
+        let mut emulator = Emulator::load_program(rom).unwrap(); //.map_err(Chip8Error::ProgramLoadingFailed)?;
+        self.initial_snapshot = emulator.clone();
+        let screen = emulator.screen.clone();
+
         let (mut tx, rx) = mpsc::channel::<EmulatorMessage>();
-        let emulator = self.emulator.clone();
-        let handle = thread::spawn(move || emulator.lock().unwrap().run(rx));
+        let handle = thread::spawn(move || emulator.run(rx));
 
         loop {
             self.process_events(&mut tx)?;
 
             if Instant::now() >= self.next_render {
                 terminal
-                    .draw(|frame| tui::draw(self, frame))
+                    .draw(|frame| tui::draw(&screen, frame))
                     .map_err(RunError::RenderFailed)?;
                 self.next_render += self.render_interval;
             }

@@ -1,4 +1,5 @@
 use std::sync::mpsc::{Receiver, TryRecvError};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use rand::RngExt;
@@ -70,7 +71,7 @@ pub struct Emulator {
     pub(crate) registers: Registers,
     pub(crate) keyboard: Ch8Keyboard,
     memory: Memory,
-    pub(crate) screen: StandardScreen,
+    pub(crate) screen: Arc<Mutex<StandardScreen>>,
 
     pub(super) state: EmulatorState,
     cpu_mode: CpuMode,
@@ -108,7 +109,7 @@ impl Default for Emulator {
             registers,
             keyboard: Ch8Keyboard::new(),
             memory: Memory::default(),
-            screen: StandardScreen::new(),
+            screen: Arc::new(Mutex::new(StandardScreen::new())),
 
             state: EmulatorState::Running(RunMode::Standard),
             cpu_mode: CpuMode::default(),
@@ -264,7 +265,7 @@ impl Emulator {
     /// Execute an instruction
     fn execute(&mut self, instr: Instruction) -> Result<(), ExecutionError> {
         match instr {
-            Instruction::CLS => self.screen.clear(),
+            Instruction::CLS => self.screen.lock().unwrap().clear(),
             Instruction::RET => {
                 let addr = self.registers.pop_stack()?;
                 self.set_pc(addr);
@@ -336,7 +337,7 @@ impl Emulator {
             }
             Instruction::DRW(vx, vy, n) => {
                 let sprite = self.memory.read(self.registers.i, Address::from(n))?.into();
-                let collision = self.screen.write_sprite(
+                let collision = self.screen.lock().unwrap().write_sprite(
                     &sprite,
                     self.vreg(vx) as usize,
                     self.vreg(vy) as usize,

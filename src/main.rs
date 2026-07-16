@@ -36,9 +36,8 @@ fn main() {
         Command::Run { rom, clock_speed } => {
             let mut app = App::<CrosstermInputManager>::default();
             let bytes = std::fs::read(rom).unwrap();
-            app.load_rom(&bytes).unwrap();
-            clock_speed.inspect(|frequency| app.set_clock_speed(*frequency));
-            ratatui::run(|terminal| app.run(terminal)).unwrap();
+            // clock_speed.inspect(|frequency| app.set_clock_speed(*frequency));
+            ratatui::run(|terminal| app.run(terminal, &bytes)).unwrap();
         }
     }
 }
