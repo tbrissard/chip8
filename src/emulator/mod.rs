@@ -191,6 +191,7 @@ impl Emulator {
         rx.recv().unwrap()
     }
 
+    /// Update the shared states
     fn update_shared_states(&mut self) {
         let shared = &mut self.shared.lock().unwrap();
         shared.screen = self.screen.clone();
@@ -238,6 +239,7 @@ impl Emulator {
                         self.next_cycle += self.cycle_interval;
 
                         if run_mode == RunMode::Debug {
+                            self.update_shared_states();
                             self.pause();
                         }
                     }
@@ -253,8 +255,8 @@ impl Emulator {
         }
     }
 
-    fn handle_message(&mut self, message: EmulatorMessage) {
-        match (message, self.state) {
+    fn handle_message(&mut self, msg: EmulatorMessage) {
+        match (msg, self.state) {
             (EmulatorMessage::TogglePause, EmulatorState::Running(_)) => self.pause(),
             (EmulatorMessage::TogglePause, EmulatorState::Paused) => self.resume(RunMode::Standard),
 
