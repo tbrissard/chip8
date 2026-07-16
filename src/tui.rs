@@ -12,14 +12,13 @@ use ratatui::{
 };
 
 use crate::{
-    app::App,
-    emulator::{Emulator, Instruction},
+    emulator::{Instruction, Shared},
     input::{self, InputManager},
     keyboard::{Ch8Key, Ch8Keyboard, KeyState},
     screen::StandardScreen,
 };
 
-pub(crate) fn draw(screen: &Arc<Mutex<StandardScreen>>, frame: &mut Frame) {
+pub(crate) fn draw(shared: &Arc<Mutex<Shared>>, frame: &mut Frame) {
     let layout = Layout::horizontal(vec![
         Constraint::Length(StandardScreen::WIDTH as u16 + 2),
         Constraint::Min(29),
@@ -35,7 +34,7 @@ pub(crate) fn draw(screen: &Arc<Mutex<StandardScreen>>, frame: &mut Frame) {
     .split(layout[1]);
 
     let buf = frame.buffer_mut();
-    render_screen(&screen.lock().unwrap(), layout[0], buf);
+    render_screen(&shared.lock().unwrap().screen, layout[0], buf);
     // render_keyboard(
     //     app.keyboard(),
     //     second_column[0].centered_horizontally(Constraint::Length(29)),

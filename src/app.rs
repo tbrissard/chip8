@@ -1,9 +1,6 @@
 use std::{
     marker::PhantomData,
-    sync::{
-        Arc, Mutex,
-        mpsc::{self, SendError, Sender},
-    },
+    sync::mpsc::{self, SendError, Sender},
     thread,
     time::{Duration, Instant},
 };
@@ -13,7 +10,6 @@ use ratatui::DefaultTerminal;
 use crate::{
     emulator::{Emulator, EmulatorMessage, MemoryError, StepError},
     input::InputManager,
-    screen::StandardScreen,
     tui,
 };
 
@@ -98,7 +94,7 @@ impl<T: InputManager> App<T> {
     pub(crate) fn run(&mut self, terminal: &mut DefaultTerminal, rom: &[u8]) -> RunResult<()> {
         let mut emulator = Emulator::load_program(rom).unwrap(); //.map_err(Chip8Error::ProgramLoadingFailed)?;
         self.initial_snapshot = emulator.clone();
-        let screen = emulator.screen.clone();
+        let shared = emulator.shared.clone();
 
         let (mut tx, rx) = mpsc::channel::<EmulatorMessage>();
         let handle = thread::spawn(move || emulator.run(rx));
@@ -108,7 +104,7 @@ impl<T: InputManager> App<T> {
 
             if Instant::now() >= self.next_render {
                 terminal
-                    .draw(|frame| tui::draw(&screen, frame))
+                    .draw(|frame| tui::draw(&shared, frame))
                     .map_err(RunError::RenderFailed)?;
                 self.next_render += self.render_interval;
             }
