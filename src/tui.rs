@@ -19,6 +19,7 @@ use crate::{
 };
 
 pub(crate) fn draw(shared: &Arc<Mutex<Shared>>, frame: &mut Frame) {
+    let shared = shared.lock().unwrap();
     let layout = Layout::horizontal(vec![
         Constraint::Length(StandardScreen::WIDTH as u16 + 2),
         Constraint::Min(29),
@@ -34,12 +35,12 @@ pub(crate) fn draw(shared: &Arc<Mutex<Shared>>, frame: &mut Frame) {
     .split(layout[1]);
 
     let buf = frame.buffer_mut();
-    render_screen(&shared.lock().unwrap().screen, layout[0], buf);
-    // render_keyboard(
-    //     app.keyboard(),
-    //     second_column[0].centered_horizontally(Constraint::Length(29)),
-    //     buf,
-    // );
+    render_screen(&shared.screen, layout[0], buf);
+    render_keyboard(
+        &shared.keyboard,
+        second_column[0].centered_horizontally(Constraint::Length(29)),
+        buf,
+    );
     // render_keybinds(second_column[1], buf);
     // render_history(app.history(), layout[2], buf);
     // render_registers(app, layout[3], buf);

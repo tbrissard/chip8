@@ -70,12 +70,12 @@ pub(crate) enum CpuMode {
 #[derive(Debug, Default)]
 pub(crate) struct Shared {
     pub(crate) screen: StandardScreen,
+    pub(crate) keyboard: Ch8Keyboard,
 }
 
 #[derive(Debug, Clone)]
 pub struct Emulator {
     pub(crate) registers: Registers,
-    pub(crate) keyboard: Ch8Keyboard,
     memory: Memory,
 
     pub(super) shared: Arc<Mutex<Shared>>,
@@ -113,11 +113,11 @@ impl Default for Emulator {
 
         Self {
             registers,
-            keyboard: Ch8Keyboard::new(),
             memory: Memory::default(),
 
             shared: Arc::new(Mutex::new(Shared {
                 screen: StandardScreen::default(),
+                keyboard: Ch8Keyboard::default(),
             })),
             state: EmulatorState::Running(RunMode::Standard),
             cpu_mode: CpuMode::default(),
@@ -169,7 +169,7 @@ impl Emulator {
             if let EmulatorState::Running(run_mode) = self.state {
                 if Instant::now() > self.next_timer_tick {
                     self.decrement_timers();
-                    self.keyboard.release_keys();
+                    self.shared.lock().unwrap().keyboard.release_keys();
                     self.next_timer_tick += self.timer_tick_interval;
                 }
 
@@ -246,7 +246,7 @@ impl Emulator {
     }
 
     fn press_key(&mut self, key: Ch8Key) {
-        self.keyboard.press_key(key);
+        self.shared.lock().unwrap().keyboard.press_key(key);
         if let CpuMode::WaitingForKey(vx) = self.cpu_mode {
             self.set_vreg(vx, Into::<u8>::into(key));
             self.cpu_mode = CpuMode::Active;
@@ -353,12 +353,24 @@ impl Emulator {
                 self.set_f(collision.into());
             }
             Instruction::SKP(vx) => {
-                if self.keyboard.is_down(self.vreg(vx).try_into()?) {
+                if self
+                    .shared
+                    .lock()
+                    .unwrap()
+                    .keyboard
+                    .is_down(self.vreg(vx).try_into()?)
+                {
                     self.skip_instr();
                 }
             }
             Instruction::SKNP(vx) => {
-                if self.keyboard.is_up(self.vreg(vx).try_into()?) {
+                if self
+                    .shared
+                    .lock()
+                    .unwrap()
+                    .keyboard
+                    .is_up(self.vreg(vx).try_into()?)
+                {
                     self.skip_instr();
                 }
             }
