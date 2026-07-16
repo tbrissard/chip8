@@ -29,6 +29,8 @@ pub(crate) enum EmulatorMessage {
     Step,
     /// Stop the emulator
     Stop,
+    /// Resets the loaded program
+    Reset,
     /// Press a key on the virtual keyboard
     KeyPress(Ch8Key),
     // /// Change the clock speed
@@ -83,7 +85,6 @@ pub(crate) struct Shared {
 /// Useful stats
 #[derive(Debug, Clone)]
 pub(crate) struct Stats {
-    /// Time spent running
     pub(crate) uptime: Duration,
     pub(crate) last_restart: Instant,
     pub(crate) last_pause: Option<Instant>,
@@ -110,17 +111,19 @@ pub struct Emulator {
     keyboard: Ch8Keyboard,
 
     pub(super) shared: Arc<Mutex<Shared>>,
+    /// Initial memory layout
+    loaded_memory: Memory,
     state: EmulatorState,
     cpu_mode: CpuMode,
 
-    pub(super) cycle_interval: Duration,
+    cycle_interval: Duration,
     next_cycle: Instant,
     timer_tick_interval: Duration,
     next_timer_tick: Instant,
 
     /// Stores executed instructions
     /// Emptied in the shared state's history during refresh to avoid cloning the whole list
-    pub(crate) history: Vec<Instruction>,
+    history: Vec<Instruction>,
     stats: Stats,
 }
 
@@ -150,8 +153,9 @@ impl Default for Emulator {
                 stats: Stats::default(),
                 history: Vec::new(),
             })),
-            state: EmulatorState::Running(RunMode::Standard),
+            state: EmulatorState::default(),
             cpu_mode: CpuMode::default(),
+            loaded_memory: Memory::default(),
 
             cycle_interval: Duration::from_secs_f64(1.0 / DEFAULT_CLOCK_SPEED),
             next_cycle: now,
@@ -166,9 +170,10 @@ impl Default for Emulator {
 
 impl Emulator {
     pub(crate) fn load_program(bytes: &[u8]) -> Result<Self, MemoryError> {
-        let mut cpu = Self::default();
-        cpu.memory.store(bytes, START_ADDRESS)?;
-        Ok(cpu)
+        let mut emulator = Self::default();
+        emulator.memory.store(bytes, START_ADDRESS)?;
+        emulator.loaded_memory = emulator.memory.clone();
+        Ok(emulator)
     }
 
     /// Poll available messages, non-blocking
@@ -265,6 +270,10 @@ impl Emulator {
 
             (EmulatorMessage::Stop, _) => self.stop(),
 
+            (EmulatorMessage::Reset, EmulatorState::Running(_) | EmulatorState::Paused) => {
+                self.reset()
+            }
+
             (EmulatorMessage::KeyPress(ch8_key), EmulatorState::Running(_)) => {
                 self.press_key(ch8_key)
             }
@@ -302,6 +311,16 @@ impl Emulator {
         self.next_timer_tick += pause_duration;
         self.stats.last_restart = now;
         self.state = EmulatorState::Running(run_mode);
+    }
+
+    fn reset(&mut self) {
+        let mutex = self.shared.clone();
+        *mutex.lock().unwrap() = Shared::default();
+        let mem = self.loaded_memory.clone();
+        *self = Self::default();
+        self.memory = mem.clone();
+        self.loaded_memory = mem;
+        self.shared = mutex;
     }
 
     fn press_key(&mut self, key: Ch8Key) {

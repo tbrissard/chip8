@@ -19,8 +19,6 @@ const FRAME_RATE: f64 = 60.0;
 pub(crate) enum Action {
     /// Exit the emulator
     Quit,
-    /// Resets the loaded program
-    Reset,
     /// Send a message to the emulator
     Message(EmulatorMessage),
 }
@@ -77,7 +75,6 @@ impl<T: InputManager> App<T> {
     ) -> std::result::Result<(), SendError<EmulatorMessage>> {
         match action {
             Action::Quit => self.terminate(),
-            Action::Reset => todo!(),
             Action::Message(emulator_message) => tx.send(emulator_message)?,
         }
         Ok(())
