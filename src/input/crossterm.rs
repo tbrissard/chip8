@@ -2,7 +2,12 @@ use std::{collections::HashMap, sync::LazyLock, time::Duration};
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent};
 
-use crate::{app::Action, emulator::EmulatorMessage, input::InputManager, keyboard::Ch8Key};
+use crate::{
+    app::Action,
+    emulator::{ClockSpeedCommand, EmulatorMessage},
+    input::InputManager,
+    keyboard::Ch8Key,
+};
 
 #[derive(Debug, Default)]
 pub(crate) struct CrosstermInputManager {}
@@ -53,6 +58,8 @@ const QUIT: KeyCode = KeyCode::Char('q');
 const PAUSE: KeyCode = KeyCode::Char('p');
 const STEP: KeyCode = KeyCode::Char('s');
 const RESET: KeyCode = KeyCode::Char('r');
+const INC_CLOCK_SPEED: KeyCode = KeyCode::Char('+');
+const DEC_CLOCK_SPEED: KeyCode = KeyCode::Char('-');
 
 pub(crate) static KEYBINDS: LazyLock<HashMap<KeyCode, (Action, &'static str)>> =
     LazyLock::new(|| {
@@ -75,6 +82,20 @@ pub(crate) static KEYBINDS: LazyLock<HashMap<KeyCode, (Action, &'static str)>> =
             (
                 RESET,
                 (Action::Message(EmulatorMessage::Reset), "Reset the game"),
+            ),
+            (
+                INC_CLOCK_SPEED,
+                (
+                    Action::Message(EmulatorMessage::ClockSpeed(ClockSpeedCommand::Increase)),
+                    "Increase the clock speed frequency by 50Hz",
+                ),
+            ),
+            (
+                DEC_CLOCK_SPEED,
+                (
+                    Action::Message(EmulatorMessage::ClockSpeed(ClockSpeedCommand::Decrease)),
+                    "Decrease the clock speed frequency by 50Hz, minimum 1",
+                ),
             ),
         ])
     });

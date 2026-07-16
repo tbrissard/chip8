@@ -22,6 +22,13 @@ mod instruction;
 mod registers;
 
 #[derive(Debug, Clone, Copy)]
+pub(crate) enum ClockSpeedCommand {
+    Set(f64),
+    Increase,
+    Decrease,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum EmulatorMessage {
     /// Pause/Resume the emulator
     TogglePause,
@@ -33,8 +40,8 @@ pub(crate) enum EmulatorMessage {
     Reset,
     /// Press a key on the virtual keyboard
     KeyPress(Ch8Key),
-    // /// Change the clock speed
-    // _ChangeClockSpeed(f64),
+    /// Change the clock speed
+    ClockSpeed(ClockSpeedCommand),
     /// Asks the emulator to refresh the shared states
     RefreshSharedStates,
 }
@@ -116,6 +123,7 @@ pub struct Emulator {
     state: EmulatorState,
     cpu_mode: CpuMode,
 
+    clock_speed: f64,
     cycle_interval: Duration,
     next_cycle: Instant,
     timer_tick_interval: Duration,
@@ -128,7 +136,8 @@ pub struct Emulator {
 }
 
 const TIMER_TICK_RATE: f64 = 60.0;
-const DEFAULT_CLOCK_SPEED: f64 = 60.0;
+const DEFAULT_CLOCK_SPEED: f64 = 100.0;
+const DEFAULT_CLOCK_SPEED_DELTA: f64 = 50.0;
 const START_ADDRESS: Address = 0x200;
 
 impl Default for Emulator {
@@ -157,6 +166,7 @@ impl Default for Emulator {
             cpu_mode: CpuMode::default(),
             loaded_memory: Memory::default(),
 
+            clock_speed: DEFAULT_CLOCK_SPEED,
             cycle_interval: Duration::from_secs_f64(1.0 / DEFAULT_CLOCK_SPEED),
             next_cycle: now,
             timer_tick_interval: Duration::from_secs_f64(1.0 / TIMER_TICK_RATE),
@@ -277,6 +287,15 @@ impl Emulator {
             (EmulatorMessage::KeyPress(ch8_key), EmulatorState::Running(_)) => {
                 self.press_key(ch8_key)
             }
+
+            (
+                EmulatorMessage::ClockSpeed(cmd),
+                EmulatorState::Running(_) | EmulatorState::Paused,
+            ) => match cmd {
+                ClockSpeedCommand::Set(frequency) => self.set_clock_speed(frequency),
+                ClockSpeedCommand::Increase => self.increase_clock_speed(),
+                ClockSpeedCommand::Decrease => self.decrease_clock_speed(),
+            },
 
             (EmulatorMessage::RefreshSharedStates, EmulatorState::Running(_)) => {
                 self.update_shared_states()
@@ -477,6 +496,20 @@ impl Emulator {
         }
 
         Ok(())
+    }
+
+    fn increase_clock_speed(&mut self) {
+        self.set_clock_speed(self.clock_speed + DEFAULT_CLOCK_SPEED_DELTA);
+    }
+
+    fn decrease_clock_speed(&mut self) {
+        // max avoid clock speed going in negative
+        self.set_clock_speed((self.clock_speed - DEFAULT_CLOCK_SPEED_DELTA).max(1.0));
+    }
+
+    fn set_clock_speed(&mut self, frequency: f64) {
+        self.clock_speed = frequency;
+        self.cycle_interval = Duration::from_secs_f64(1.0 / frequency);
     }
 
     /// Advance the program counter to the next instruction

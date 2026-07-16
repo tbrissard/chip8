@@ -29,7 +29,7 @@ You can find chip8 ROMs [here](https://github.com/dmatlack/chip8/tree/master/rom
 ## Todo
 
 - add documentation
-- look into mpsc channels and async/event-driven
+- async
 - check test coverage and add tests where missing
 - emit sound when sound timer is on (or find a way to signal it)
 - add support for some chip8 extension (superchip, megachip, etc)
