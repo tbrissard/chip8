@@ -41,7 +41,7 @@ pub(crate) fn draw(shared: &Arc<Mutex<Shared>>, frame: &mut Frame) {
         second_column[0].centered_horizontally(Constraint::Length(29)),
         buf,
     );
-    // render_keybinds(second_column[1], buf);
+    render_keybinds(second_column[1], buf);
     render_history(&shared.history, layout[2], buf);
     render_registers(&shared.registers, &shared.stats, layout[3], buf);
 }

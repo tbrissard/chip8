@@ -119,7 +119,7 @@ pub struct Emulator {
     next_timer_tick: Instant,
 
     /// Stores executed instructions
-    /// It is emptied in the shared state's history before each refresh to avoid having to clone the whole list
+    /// Emptied in the shared state's history during refresh to avoid cloning the whole list
     pub(crate) history: Vec<Instruction>,
     stats: Stats,
 }
