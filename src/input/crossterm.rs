@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::LazyLock, time::Duration};
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent};
 
-use crate::{app::Action, input::InputManager, keyboard::Ch8Key};
+use crate::{app::Action, emulator::EmulatorMessage, input::InputManager, keyboard::Ch8Key};
 
 #[derive(Debug, Default)]
 pub(crate) struct CrosstermInputManager {}
@@ -41,9 +41,9 @@ impl CrosstermInputManager {
 
     fn handle_key_event(event: KeyEvent) -> Option<Action> {
         match Ch8Key::try_from(event.code) {
-            Ok(ch8_key) => Some(Action::Chip8KeyPress(ch8_key)),
+            Ok(ch8_key) => Some(Action::Message(EmulatorMessage::KeyPress(ch8_key))),
             Err(InputError::NotAVirtualKey(key_code)) => {
-                KEYBINDS.get(&key_code).map(|(action, _)| action.clone())
+                KEYBINDS.get(&key_code).map(|(action, _)| *action)
             }
         }
     }
@@ -58,8 +58,20 @@ pub(crate) static KEYBINDS: LazyLock<HashMap<KeyCode, (Action, &'static str)>> =
     LazyLock::new(|| {
         HashMap::from([
             (QUIT, (Action::Quit, "Exit")),
-            (PAUSE, (Action::TogglePause, "Pause/Unpause")),
-            (STEP, (Action::Step, "Step to next instruction")),
+            (
+                PAUSE,
+                (
+                    Action::Message(EmulatorMessage::TogglePause),
+                    "Pause/Unpause",
+                ),
+            ),
+            (
+                STEP,
+                (
+                    Action::Message(EmulatorMessage::Step),
+                    "Step to next instruction",
+                ),
+            ),
             (RESET, (Action::Reset, "Reset the game")),
         ])
     });

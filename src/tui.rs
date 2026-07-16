@@ -1,4 +1,5 @@
 use ratatui::{
+    Frame,
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
     prelude::Widget,
@@ -6,7 +7,6 @@ use ratatui::{
     symbols::border,
     text::{Line, Text, ToLine, ToText},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use crate::{
@@ -33,15 +33,16 @@ pub(crate) fn draw<T: InputManager>(app: &App<T>, frame: &mut Frame) {
     .split(layout[1]);
 
     let buf = frame.buffer_mut();
-    render_screen(app.screen(), layout[0], buf);
-    render_keyboard(
-        app.keyboard(),
-        second_column[0].centered_horizontally(Constraint::Length(29)),
-        buf,
-    );
-    render_keybinds(second_column[1], buf);
-    render_history(app.history(), layout[2], buf);
-    render_registers(app, layout[3], buf);
+    let screen = &app.emulator.lock().unwrap().screen;
+    render_screen(screen, layout[0], buf);
+    // render_keyboard(
+    //     app.keyboard(),
+    //     second_column[0].centered_horizontally(Constraint::Length(29)),
+    //     buf,
+    // );
+    // render_keybinds(second_column[1], buf);
+    // render_history(app.history(), layout[2], buf);
+    // render_registers(app, layout[3], buf);
 }
 
 fn render_history(history: &[Instruction], area: Rect, buf: &mut Buffer) {
@@ -151,62 +152,62 @@ fn render_screen(screen: &StandardScreen, area: Rect, buf: &mut Buffer) {
         .render(layout[0], buf);
 }
 
-fn render_registers<T: InputManager>(app: &App<T>, area: Rect, buf: &mut Buffer) {
-    let registers = &app.emulator.registers;
+// fn render_registers<T: InputManager>(app: &App<T>, area: Rect, buf: &mut Buffer) {
+//     let registers = &app.emulator.registers;
 
-    let title = Line::from("Registers".bold());
-    let block = Block::default()
-        .borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT)
-        .title(title.centered())
-        .border_set(border::THICK);
-    let block_area = block.inner(area);
+//     let title = Line::from("Registers".bold());
+//     let block = Block::default()
+//         .borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT)
+//         .title(title.centered())
+//         .border_set(border::THICK);
+//     let block_area = block.inner(area);
 
-    let layout = Layout::horizontal(vec![Constraint::Length(8), Constraint::Length(22)])
-        .spacing(3)
-        .split(block_area);
+//     let layout = Layout::horizontal(vec![Constraint::Length(8), Constraint::Length(22)])
+//         .spacing(3)
+//         .split(block_area);
 
-    let layout2 =
-        Layout::vertical(vec![Constraint::Fill(1), Constraint::Length(4)]).split(layout[1]);
+//     let layout2 =
+//         Layout::vertical(vec![Constraint::Fill(1), Constraint::Length(4)]).split(layout[1]);
 
-    let v_registers = Text::from(
-        registers
-            .values
-            .iter()
-            .enumerate()
-            .map(|(i, vreg)| Line::from(format!("V{i:2}: {vreg:3}")))
-            .collect::<Vec<_>>(),
-    )
-    .centered();
+//     let v_registers = Text::from(
+//         registers
+//             .values
+//             .iter()
+//             .enumerate()
+//             .map(|(i, vreg)| Line::from(format!("V{i:2}: {vreg:3}")))
+//             .collect::<Vec<_>>(),
+//     )
+//     .centered();
 
-    let mut others = vec![
-        Line::from(format!(
-            "Program Counter: {:#05X}",
-            registers.program_counter
-        )),
-        Line::from(format!("I: {:#05X}", registers.i)),
-        Line::from(""),
-        Line::from(format!("Delay Timer: {}", registers.delay_timer)),
-        Line::from(format!("Sound Timer: {}", registers.sound_timer)),
-        Line::from(""),
-        Line::from(format!("Stack Pointer: {}", registers.stack_pointer)),
-    ];
-    others.extend(
-        registers
-            .stack
-            .iter()
-            .map(|addr| format!("{addr:#X}"))
-            .map(Line::from),
-    );
-    let others = Text::from(others);
+//     let mut others = vec![
+//         Line::from(format!(
+//             "Program Counter: {:#05X}",
+//             registers.program_counter
+//         )),
+//         Line::from(format!("I: {:#05X}", registers.i)),
+//         Line::from(""),
+//         Line::from(format!("Delay Timer: {}", registers.delay_timer)),
+//         Line::from(format!("Sound Timer: {}", registers.sound_timer)),
+//         Line::from(""),
+//         Line::from(format!("Stack Pointer: {}", registers.stack_pointer)),
+//     ];
+//     others.extend(
+//         registers
+//             .stack
+//             .iter()
+//             .map(|addr| format!("{addr:#X}"))
+//             .map(Line::from),
+//     );
+//     let others = Text::from(others);
 
-    let stats = Text::from(vec![
-        Line::from(format!("Uptime: {}ms", app.emulator.uptime.as_millis())),
-        Line::from(format!("Cycles count: {}", app.emulator.cycles)),
-        Line::from(format!("Emulator state: {:?}", app.emulator_state)),
-    ]);
+//     let stats = Text::from(vec![
+//         Line::from(format!("Uptime: {}ms", app.emulator.uptime.as_millis())),
+//         Line::from(format!("Cycles count: {}", app.emulator.cycles)),
+//         Line::from(format!("Emulator state: {:?}", app.emulator_state)),
+//     ]);
 
-    v_registers.render(layout[0], buf);
-    others.render(layout[1], buf);
-    block.render(area, buf);
-    stats.render(layout2[1], buf);
-}
+//     v_registers.render(layout[0], buf);
+//     others.render(layout[1], buf);
+//     block.render(area, buf);
+//     stats.render(layout2[1], buf);
+// }

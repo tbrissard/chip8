@@ -1,6 +1,7 @@
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 
-use rand::{rngs::ThreadRng, RngExt};
+use rand::RngExt;
 
 pub(crate) use crate::emulator::instruction::{Instruction, InstructionError};
 pub(crate) use crate::emulator::registers::Registers;
@@ -18,11 +19,49 @@ use crate::{
 mod instruction;
 mod registers;
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum EmulatorMessage {
+    /// Pause/Resume the emulator
+    TogglePause,
+    /// Only execute the next instruction, then pause the emulator
+    Step,
+    /// Stop the emulator
+    Stop,
+    /// Press a key on the virtual keyboard
+    KeyPress(Ch8Key),
+    // /// Change the clock speed
+    // _ChangeClockSpeed(f64),
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub(super) enum CpuState {
+enum RunMode {
     #[default]
-    Executing,
-    /// the cpu is waiting for a key to be pressed (see instruction `LD_K`)
+    Standard,
+    /// The emulator will enter the [Paused] state after the next instruction
+    Debug,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EmulatorState {
+    /// The emulator runs
+    Running(RunMode),
+    /// The execution is paused
+    Paused,
+    /// The emulator has reached the end of execution
+    Stopped,
+}
+
+impl Default for EmulatorState {
+    fn default() -> Self {
+        Self::Running(RunMode::default())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum CpuMode {
+    #[default]
+    Active,
+    /// The cpu is waiting for a key press (see instruction `LD_K`)
     WaitingForKey(VRegister),
 }
 
@@ -33,15 +72,27 @@ pub struct Emulator {
     memory: Memory,
     pub(crate) screen: StandardScreen,
 
-    rng: ThreadRng,
-    pub(crate) cpu_state: CpuState,
+    pub(super) state: EmulatorState,
+    cpu_mode: CpuMode,
 
+    pub(super) cycle_interval: Duration,
+    next_cycle: Instant,
+    timer_tick_interval: Duration,
+    next_timer_tick: Instant,
+
+    /// Executed instructions
+    pub(crate) history: Vec<Instruction>,
     // self.emulator_uptime += Instant::now().saturating_duration_since(emulator_start);
+    /// Time spent running
     pub(crate) uptime: Duration,
     last_restart: Instant,
+    last_pause: Option<Instant>,
+    /// Number of instructions executed
     pub(crate) cycles: u16,
 }
 
+const TIMER_TICK_RATE: f64 = 60.0;
+const DEFAULT_CLOCK_SPEED: f64 = 60.0;
 const START_ADDRESS: Address = 0x200;
 
 impl Default for Emulator {
@@ -51,19 +102,26 @@ impl Default for Emulator {
             ..Default::default()
         };
 
+        let now = Instant::now();
+
         Self {
             registers,
             keyboard: Ch8Keyboard::new(),
             memory: Memory::default(),
             screen: StandardScreen::new(),
 
-            rng: ThreadRng::default(),
-            cpu_state: CpuState::default(),
+            state: EmulatorState::Running(RunMode::Standard),
+            cpu_mode: CpuMode::default(),
 
-            /// Time spent running
+            cycle_interval: Duration::from_secs_f64(1.0 / DEFAULT_CLOCK_SPEED),
+            next_cycle: now,
+            timer_tick_interval: Duration::from_secs_f64(1.0 / TIMER_TICK_RATE),
+            next_timer_tick: now,
+
+            history: Vec::new(),
             uptime: Duration::ZERO,
-            last_restart: Instant::now(),
-            /// Number of instructions executed
+            last_restart: now,
+            last_pause: None,
             cycles: 0,
         }
     }
@@ -76,24 +134,114 @@ impl Emulator {
         Ok(cpu)
     }
 
-    pub(super) fn run(&mut self) {
+    fn poll_messages(rx: &Receiver<EmulatorMessage>) -> Vec<EmulatorMessage> {
+        let mut messages = Vec::new();
+        loop {
+            match rx.try_recv() {
+                Ok(msg) => messages.push(msg),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    panic!("cannot receive messages, channel disconnected")
+                }
+            }
+        }
+        messages
+    }
+
+    pub(super) fn run(&mut self, rx: Receiver<EmulatorMessage>) {
         self.last_restart = Instant::now();
+
+        while self.state != EmulatorState::Stopped {
+            let messages = Self::poll_messages(&rx);
+            for msg in messages {
+                self.handle_message(msg);
+            }
+
+            if let EmulatorState::Running(run_mode) = self.state {
+                if Instant::now() > self.next_timer_tick {
+                    self.decrement_timers();
+                    self.keyboard.release_keys();
+                    self.next_timer_tick += self.timer_tick_interval;
+                }
+
+                if Instant::now() >= self.next_cycle && self.cpu_mode == CpuMode::Active {
+                    let pc = self.registers.program_counter;
+                    let last_instr = self.step().unwrap();
+                    if self.registers.program_counter == pc {
+                        // execution address has not changed, the program has entered a dead state
+                        self.stop();
+                        break;
+                    }
+
+                    self.history.push(last_instr);
+                    self.cycles += 1;
+                    self.next_cycle += self.cycle_interval;
+
+                    if run_mode == RunMode::Debug {
+                        self.pause();
+                        break;
+                    }
+                }
+
+                std::thread::sleep(
+                    self.next_cycle
+                        .min(self.next_timer_tick)
+                        .saturating_duration_since(Instant::now()),
+                );
+            }
+        }
     }
 
-    pub(super) fn pause(&mut self) {
-        self.uptime += Instant::now().duration_since(self.last_restart);
+    fn handle_message(&mut self, message: EmulatorMessage) {
+        match (message, self.state) {
+            (EmulatorMessage::TogglePause, EmulatorState::Running(_)) => self.pause(),
+            (EmulatorMessage::TogglePause, EmulatorState::Paused) => self.resume(RunMode::Standard),
+
+            (EmulatorMessage::Step, EmulatorState::Paused) => self.resume(RunMode::Debug),
+            (EmulatorMessage::Step, EmulatorState::Running(RunMode::Standard)) => self.pause(),
+
+            (EmulatorMessage::Stop, _) => self.stop(),
+
+            (EmulatorMessage::KeyPress(ch8_key), EmulatorState::Running(_)) => {
+                self.press_key(ch8_key)
+            }
+
+            (_, _) => {}
+        }
     }
 
-    pub(super) fn resume(&mut self) {
-        self.last_restart = Instant::now();
+    fn stop(&mut self) {
+        self.state = EmulatorState::Stopped;
     }
 
-    /// Execute the next instruction and returns it
-    pub(super) fn step(&mut self) -> Result<Instruction, StepError> {
-        let instr = self.next_instr()?;
-        self.execute(instr)
-            .map_err(|e| StepError::Execution(instr, e))?;
-        Ok(instr)
+    /// Pause the emulator's execution
+    fn pause(&mut self) {
+        let now = Instant::now();
+        self.last_pause = Some(now);
+        self.uptime += now.duration_since(self.last_restart);
+        self.state = EmulatorState::Paused;
+    }
+
+    /// Resume the emulator's execution
+    fn resume(&mut self, run_mode: RunMode) {
+        let now = Instant::now();
+        let pause_duration = now.duration_since(
+            self.last_pause
+                .take()
+                .expect("emulator was not paused properly (missing last_pause)"),
+        );
+        self.next_cycle += pause_duration;
+        self.next_timer_tick += pause_duration;
+        self.last_restart = now;
+        self.state = EmulatorState::Running(run_mode);
+    }
+
+    fn press_key(&mut self, key: Ch8Key) {
+        self.keyboard.press_key(key);
+        if let CpuMode::WaitingForKey(vx) = self.cpu_mode {
+            self.set_vreg(vx, Into::<u8>::into(key));
+            self.cpu_mode = CpuMode::Active;
+        }
     }
 
     /// Fetch the next instruction
@@ -102,6 +250,14 @@ impl Emulator {
         let a = <&[u8; 2]>::try_from(a).unwrap();
         let instr = std::convert::TryInto::<Instruction>::try_into(a)?;
         self.registers.program_counter += 2;
+        Ok(instr)
+    }
+
+    /// Execute the next instruction and returns it
+    pub(super) fn step(&mut self) -> Result<Instruction, StepError> {
+        let instr = self.next_instr()?;
+        self.execute(instr)
+            .map_err(|e| StepError::Execution(instr, e))?;
         Ok(instr)
     }
 
@@ -174,7 +330,8 @@ impl Emulator {
                 self.set_pc(Address::from(self.vreg(VRegister::V0)) + addr);
             }
             Instruction::RND(vx, kk) => {
-                let rnd: u8 = self.rng.random();
+                let mut rng = rand::rng();
+                let rnd: u8 = rng.random();
                 self.set_vreg(vx, rnd & kk);
             }
             Instruction::DRW(vx, vy, n) => {
@@ -197,7 +354,7 @@ impl Emulator {
                 }
             }
             Instruction::LD_DT(vx) => self.set_vreg(vx, self.registers.delay_timer),
-            Instruction::LD_K(vx) => self.cpu_state = CpuState::WaitingForKey(vx),
+            Instruction::LD_K(vx) => self.cpu_mode = CpuMode::WaitingForKey(vx),
             Instruction::SET_DT(vx) => self.registers.delay_timer = self.vreg(vx),
             Instruction::SET_ST(vx) => self.registers.sound_timer = self.vreg(vx),
             Instruction::ADD_I(vx) => self.registers.i += Address::from(self.vreg(vx)),
@@ -233,17 +390,7 @@ impl Emulator {
             }
         }
 
-        self.cycles += 1;
-
         Ok(())
-    }
-
-    pub(crate) fn press_key(&mut self, key: Ch8Key) {
-        self.keyboard.press_key(key);
-        if let CpuState::WaitingForKey(vx) = self.cpu_state {
-            self.set_vreg(vx, Into::<u8>::into(key));
-            self.cpu_state = CpuState::Executing;
-        }
     }
 
     fn skip_instr(&mut self) {
