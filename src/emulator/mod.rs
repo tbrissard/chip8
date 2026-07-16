@@ -76,6 +76,8 @@ pub(crate) struct Shared {
     pub(crate) keyboard: Ch8Keyboard,
     pub(crate) registers: Registers,
     pub(crate) stats: Stats,
+    /// Executed instructions
+    pub(crate) history: Vec<Instruction>,
 }
 
 /// Useful stats
@@ -116,7 +118,8 @@ pub struct Emulator {
     timer_tick_interval: Duration,
     next_timer_tick: Instant,
 
-    /// Executed instructions
+    /// Stores executed instructions
+    /// It is emptied in the shared state's history before each refresh to avoid having to clone the whole list
     pub(crate) history: Vec<Instruction>,
     stats: Stats,
 }
@@ -145,6 +148,7 @@ impl Default for Emulator {
                 keyboard: Ch8Keyboard::default(),
                 registers,
                 stats: Stats::default(),
+                history: Vec::new(),
             })),
             state: EmulatorState::Running(RunMode::Standard),
             cpu_mode: CpuMode::default(),
@@ -193,6 +197,7 @@ impl Emulator {
         shared.keyboard = self.keyboard.clone();
         shared.registers = self.regs.clone();
         shared.stats = self.stats.clone();
+        shared.history.append(&mut self.history);
     }
 
     pub(super) fn run(&mut self, rx: Receiver<EmulatorMessage>) {

@@ -13,7 +13,7 @@ use ratatui::{
 
 use crate::{
     emulator::{Instruction, Registers, Shared, Stats},
-    input::{self, InputManager},
+    input::{self},
     keyboard::{Ch8Key, Ch8Keyboard, KeyState},
     screen::StandardScreen,
 };
@@ -42,7 +42,7 @@ pub(crate) fn draw(shared: &Arc<Mutex<Shared>>, frame: &mut Frame) {
         buf,
     );
     // render_keybinds(second_column[1], buf);
-    // render_history(app.history(), layout[2], buf);
+    render_history(&shared.history, layout[2], buf);
     render_registers(&shared.registers, &shared.stats, layout[3], buf);
 }
 
